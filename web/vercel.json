@@ -1,16 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/config.js",
-      "destination": "/config.js"
-    }
-  ],
-  "headers": [
+      "source": "/api/:path*",
+      "destination": "http://169.58.195.244/api/:path*"
+    },
     {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Frame-Options", "value": "DENY" }
-      ]
+      "source": "/health",
+      "destination": "http://169.58.195.244/health"
     }
   ]
 }
