@@ -28,7 +28,7 @@ fi
 cd "$APP_DIR"
 npm install --omit=dev
 
-mkdir -p output data/jobs
+mkdir -p output data/jobs data/projects
 
 # Nginx reverse proxy
 cat > /etc/nginx/sites-available/ecoom-ads <<'NGINX'

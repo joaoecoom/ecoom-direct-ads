@@ -121,7 +121,7 @@ A partir daí podes pedir no chat: *"Gera um vídeo Veo com este prompt..."*
 
 Repositório: **https://github.com/joaoecoom/ecoom-direct-ads**
 
-Frontend: **https://web-liard-pi-k8e9ujwuis.vercel.app**
+Frontend: **https://ecoom-direct-ads.vercel.app**
 
 ### CI/CD (GitHub Actions)
 
@@ -180,22 +180,7 @@ Frontend estático em `web/` — **já deployado**:
 
 Antes de usar, aponta a API:
 
-```bash
-ECOOM_API_URL=https://api.teu-dominio.com bash scripts/inject-api-url.sh
-cd web && vercel deploy --prod
-```
-
-Ou edita `web/config.js` manualmente:
-
-```js
-window.ECOOM_API_URL = "https://api.teu-dominio.com";
-```
-
-No `.env` da VPS:
-
-```
-FRONTEND_URL=https://web-liard-pi-k8e9ujwuis.vercel.app
-```
+Frontend em produção: **https://ecoom-direct-ads.vercel.app**
 
 ---
 

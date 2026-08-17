@@ -3,77 +3,259 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ecoom Direct ADS</title>
+    <title>Ecoom Direct ADS — Creative Studio</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main>
-      <h1>Ecoom Direct ADS</h1>
-      <p class="subtitle">
-        Descreve a oferta — storyboard, imagens UGC, vídeo Veo e copy automáticos.
-        <span class="badges">
-          <span class="badge">PT-BR</span>
-          <span class="badge">English</span>
-          <span class="badge">UGC</span>
-        </span>
-      </p>
-
-      <form id="ad-form" class="card">
-        <label for="offer">Brief da oferta</label>
-        <textarea
-          id="offer"
-          required
-          placeholder="Ex: Suplemento de vitamina D para energia no inverno — médico amigável UGC"
-        ></textarea>
-
-        <div class="grid">
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="logo-mark">E</div>
           <div>
-            <label for="language">Idioma</label>
-            <select id="language"></select>
-          </div>
-          <div>
-            <label for="variant">Variante</label>
-            <select id="variant"></select>
-          </div>
-          <div>
-            <label for="format">Formato</label>
-            <select id="format"></select>
-          </div>
-          <div>
-            <label for="scenes">Cenas</label>
-            <select id="scenes"></select>
-          </div>
-          <div>
-            <label for="duration">Duração/clip</label>
-            <select id="duration"></select>
-          </div>
-          <div>
-            <label for="resolution">Resolução</label>
-            <select id="resolution"></select>
+            <strong>Ecoom Direct</strong>
+            <span>Creative Studio</span>
           </div>
         </div>
 
-        <button type="submit" class="primary" id="submit-btn">Gerar anúncio</button>
-      </form>
+        <button type="button" class="btn new-project-btn" id="sidebar-new-project">
+          + New Project
+        </button>
 
-      <div id="error" class="card error hidden"></div>
+        <nav class="sidebar-nav">
+          <button type="button" class="sidebar-link" data-nav="projects">
+            <span class="icon">◫</span> Projects
+          </button>
+          <button type="button" class="sidebar-link" data-nav="library">
+            <span class="icon">▣</span> Library
+          </button>
+          <button type="button" class="sidebar-link" data-nav="templates">
+            <span class="icon">◇</span> Templates
+          </button>
+        </nav>
 
-      <div id="job-panel" class="card hidden">
-        <div class="status">
-          <span id="status-dot" class="dot"></span>
-          <div>
-            <strong id="job-title"></strong>
-            <div id="job-message" class="muted"></div>
+        <div class="sidebar-section">
+          <span class="sidebar-label">Recent</span>
+          <div id="sidebar-projects" class="sidebar-projects"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button type="button" class="sidebar-link" data-nav="settings">
+            <span class="icon">⚙</span> Settings
+          </button>
+          <button type="button" class="sidebar-link" data-nav="account">
+            <span class="icon">◉</span> Account
+          </button>
+          <div id="api-status" class="api-status">...</div>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <!-- PROJECTS LIST -->
+        <section id="view-projects" class="view">
+          <header class="view-header">
+            <div>
+              <h1>Projects</h1>
+              <p class="muted">Cria, organiza e produz criativos Direct Response.</p>
+            </div>
+            <button type="button" class="btn primary" id="btn-new-project">+ New Project</button>
+          </header>
+          <div id="project-list"></div>
+        </section>
+
+        <!-- PROJECT WORKSPACE -->
+        <section id="view-project" class="view hidden">
+          <header class="view-header project-header">
+            <div>
+              <button type="button" class="btn ghost sm" id="btn-back-projects">← Projects</button>
+              <h1 id="project-title">Project</h1>
+              <p id="project-subtitle" class="muted"></p>
+            </div>
+            <button type="button" class="btn ghost sm" id="btn-rename-project">Rename</button>
+          </header>
+
+          <div id="workspace-tabs" class="workspace-tabs"></div>
+
+          <div class="create-workspace">
+            <div class="create-hero card">
+              <p class="eyebrow">Master Creative Prompt</p>
+              <h2>What do you want to create?</h2>
+              <p class="muted">
+                Descreve o anúncio completo — objetivo, persona, tom, duração, CTA. A IA
+                transforma isto em storyboard, imagens e vídeo.
+              </p>
+            </div>
+
+            <form id="create-ad-form" class="card create-form">
+              <label for="master-prompt">Master Creative Prompt</label>
+              <textarea
+                id="master-prompt"
+                required
+                placeholder="Quero um vídeo UGC de 60 segundos para um suplemento de energia, mulher portuguesa de 40 anos, ambiente de cozinha, tom natural, estilo testimonial, com CTA para experimentar."
+              ></textarea>
+
+              <div class="settings-drawer">
+                <details open>
+                  <summary>Global Creative Settings</summary>
+                  <div class="grid">
+                    <div>
+                      <label for="total-duration">Duração total</label>
+                      <select id="total-duration"></select>
+                    </div>
+                    <div id="custom-duration-wrap" class="hidden">
+                      <label for="custom-duration">Segundos (custom)</label>
+                      <input type="number" id="custom-duration" min="8" max="600" value="60" />
+                    </div>
+                    <div>
+                      <label for="duration">Duração / clip</label>
+                      <select id="duration"></select>
+                    </div>
+                    <div>
+                      <label for="scenes">Cenas</label>
+                      <select id="scenes"></select>
+                    </div>
+                    <div class="full-width">
+                      <p id="scene-hint" class="hint"></p>
+                    </div>
+                    <div>
+                      <label for="format">Formato</label>
+                      <select id="format"></select>
+                    </div>
+                    <div>
+                      <label for="resolution">Resolução</label>
+                      <select id="resolution"></select>
+                    </div>
+                    <div>
+                      <label for="language">Idioma</label>
+                      <select id="language"></select>
+                    </div>
+                    <div>
+                      <label for="variant">Variante</label>
+                      <select id="variant"></select>
+                    </div>
+                    <div>
+                      <label for="style">Estilo</label>
+                      <select id="style"></select>
+                    </div>
+                    <div>
+                      <label for="tone">Tom</label>
+                      <select id="tone"></select>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div class="create-actions">
+                <span class="action-chip disabled" title="Fase 3">Image</span>
+                <span class="action-chip disabled" title="Fase 4">Video</span>
+                <span class="action-chip disabled" title="Fase 3">Upload</span>
+                <button type="submit" class="btn primary lg" id="submit-btn">Generate Creative</button>
+              </div>
+            </form>
+
+            <div id="create-error" class="card error hidden"></div>
+
+            <div id="job-panel" class="card hidden">
+              <div class="status">
+                <span id="status-dot" class="dot"></span>
+                <div>
+                  <strong id="job-title"></strong>
+                  <div id="job-message" class="muted"></div>
+                </div>
+              </div>
+              <div id="video-wrap" class="video-wrap hidden">
+                <video id="result-video" controls playsinline></video>
+              </div>
+              <h3 id="copy-heading" class="hidden">Copy</h3>
+              <div id="copy-block" class="copy-block hidden"></div>
+            </div>
+
+            <div id="blueprint-panel" class="card blueprint-panel hidden">
+              <div class="blueprint-head">
+                <div>
+                  <p class="eyebrow">Creative Blueprint</p>
+                  <h3 id="blueprint-title">Storyboard</h3>
+                  <p id="blueprint-meta" class="muted"></p>
+                </div>
+              </div>
+              <div id="blueprint-scenes" class="blueprint-scenes"></div>
+            </div>
+
+            <div class="roadmap card muted-box">
+              <strong>Próximas fases</strong>
+              <p class="muted">
+                Images → Animate All → Timeline → Regeneração parcial → Rebuild final.
+                O pipeline actual continua intacto.
+              </p>
+            </div>
           </div>
-        </div>
-        <div id="video-wrap" class="video-wrap hidden">
-          <video id="result-video" controls playsinline></video>
-        </div>
-        <h3 id="copy-heading" class="hidden">Copy</h3>
-        <div id="copy-block" class="copy-block hidden"></div>
+        </section>
+
+        <!-- LIBRARY -->
+        <section id="view-library" class="view hidden">
+          <header class="view-header">
+            <h1>Library</h1>
+            <p class="muted">Imagens, vídeos, produtos e personagens — Fase 3.</p>
+          </header>
+          <div class="placeholder card">
+            <p>Assets gerados e uploads aparecerão aqui.</p>
+          </div>
+        </section>
+
+        <!-- TEMPLATES -->
+        <section id="view-templates" class="view hidden">
+          <header class="view-header">
+            <h1>Templates</h1>
+            <p class="muted">Verticals Direct Response — em breve.</p>
+          </header>
+          <div class="placeholder card">
+            <p>E-commerce · Infoproduto · SaaS · Local business</p>
+          </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="view-settings" class="view hidden">
+          <header class="view-header">
+            <h1>Settings</h1>
+          </header>
+          <div class="card">
+            <p class="muted">API via proxy Vercel → VPS. GCP Vertex AI + Veo.</p>
+            <p class="muted">PT-BR / EN activos · PT-PT (TTS + lip sync) preparado.</p>
+          </div>
+        </section>
+
+        <!-- ACCOUNT -->
+        <section id="view-account" class="view hidden">
+          <header class="view-header">
+            <h1>Account</h1>
+          </header>
+          <div class="card">
+            <p class="muted">Autenticação e billing — fase futura.</p>
+          </div>
+        </section>
       </div>
-    </main>
+    </div>
+
+    <!-- NEW PROJECT MODAL -->
+    <div id="new-project-modal" class="modal hidden">
+      <div class="modal-card card">
+        <h2>New Project</h2>
+        <form id="new-project-form">
+          <label for="new-project-name">Nome</label>
+          <input type="text" id="new-project-name" required placeholder="Vitamina D UGC" />
+          <label for="new-project-prompt">Master Prompt (opcional)</label>
+          <textarea
+            id="new-project-prompt"
+            placeholder="Brief inicial do anúncio..."
+          ></textarea>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" id="modal-cancel">Cancelar</button>
+            <button type="submit" class="btn primary">Criar projecto</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script src="/config.js"></script>
-    <script src="/app.js"></script>
+    <script type="module" src="/js/app.js"></script>
   </body>
 </html>

@@ -17,6 +17,15 @@ import {
 } from "../src/lib/ad-config.js";
 import { runAdGeneration } from "../src/run-ad-generation.js";
 import { createJob, getJob, listJobs, updateJob } from "./job-store.js";
+import {
+  createProject,
+  deleteProject,
+  duplicateProject,
+  getProject,
+  linkJobToProject,
+  listProjects,
+  updateProject,
+} from "./project-store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -48,7 +57,65 @@ app.get("/api/config", (_req, res) => {
     resolutions: AD_RESOLUTIONS,
     tones: AD_TONES,
     styles: AD_STYLES,
+    features: {
+      projects: true,
+      maxSceneCount: Math.max(...AD_SCENE_COUNTS),
+    },
   });
+});
+
+app.get("/api/projects", async (_req, res) => {
+  const projects = await listProjects();
+  res.json({ projects });
+});
+
+app.post("/api/projects", async (req, res) => {
+  const { name, masterPrompt, settings } = req.body || {};
+  const project = await createProject({ name, masterPrompt, settings });
+  res.status(201).json(project);
+});
+
+app.get("/api/projects/:id", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  res.json(project);
+});
+
+app.patch("/api/projects/:id", async (req, res) => {
+  try {
+    const project = await updateProject(req.params.id, req.body || {});
+    res.json(project);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.delete("/api/projects/:id", async (req, res) => {
+  const ok = await deleteProject(req.params.id);
+  if (!ok) return res.status(404).json({ error: "Projecto não encontrado" });
+  res.status(204).end();
+});
+
+app.post("/api/projects/:id/duplicate", async (req, res) => {
+  const copy = await duplicateProject(req.params.id);
+  if (!copy) return res.status(404).json({ error: "Projecto não encontrado" });
+  res.status(201).json(copy);
+});
+
+app.get("/api/projects/:id/storyboard", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const storyboardPath =
+    project.latestCreative?.storyboardPath ||
+    project.creatives?.slice(-1)[0]?.storyboardPath;
+
+  if (!storyboardPath || !fs.existsSync(storyboardPath)) {
+    return res.status(404).json({ error: "Storyboard ainda não disponível" });
+  }
+
+  const raw = fs.readFileSync(storyboardPath, "utf8");
+  res.json(JSON.parse(raw));
 });
 
 app.get("/api/jobs", async (_req, res) => {
@@ -83,21 +150,28 @@ app.get("/api/jobs/:id/copy", async (req, res) => {
 });
 
 app.post("/api/jobs", async (req, res) => {
-  const { offer, ...overrides } = req.body || {};
+  const { offer, projectId, ...overrides } = req.body || {};
   if (!offer?.trim()) {
     return res.status(400).json({ error: "Campo 'offer' (brief) é obrigatório." });
+  }
+
+  if (projectId) {
+    const project = await getProject(projectId);
+    if (!project) {
+      return res.status(404).json({ error: "Projecto não encontrado" });
+    }
   }
 
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
-    request: { offer: offer.trim(), overrides },
+    request: { offer: offer.trim(), overrides, projectId: projectId || null },
   });
 
   queue.push(id);
   processQueue();
 
-  res.status(202).json({ jobId: id, status: "queued", queueLength: queue.length });
+  res.status(202).json({ jobId: id, status: "queued", queueLength: queue.length, projectId });
 });
 
 /** Vários briefs de uma vez — processa em fila automática */
@@ -171,8 +245,20 @@ async function processQueue() {
         copy: result.copy,
         storyboardPath: result.storyboardPath,
         title: result.storyboard?.title,
+        storyboard: result.storyboard,
       },
     });
+
+    const projectId = job.request?.projectId;
+    if (projectId) {
+      await linkJobToProject(projectId, jobId, {
+        title: result.storyboard?.title,
+        storyboardPath: result.storyboardPath,
+        finalVideo: result.finalVideo,
+        copyPath: result.copyPath,
+        status: "completed",
+      });
+    }
   } catch (err) {
     await updateJob(jobId, {
       status: "failed",
