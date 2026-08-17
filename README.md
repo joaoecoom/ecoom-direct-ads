@@ -117,6 +117,67 @@ A partir daí podes pedir no chat: *"Gera um vídeo Veo com este prompt..."*
 
 ---
 
+## Deploy (VPS + GitHub + Vercel)
+
+Repositório: **https://github.com/joaoecoom/ecoom-direct-ads**
+
+### Arquitectura
+
+```
+Vercel (frontend web/)  →  VPS (API server/)  →  Google Veo / Gemini
+```
+
+### 1. GitHub — feito
+
+Código em `joaoecoom/ecoom-direct-ads`.
+
+### 2. VPS — API (corre o pipeline)
+
+Na VPS (Ubuntu):
+
+```bash
+git clone https://github.com/joaoecoom/ecoom-direct-ads.git /opt/ecoom-direct-ads
+cd /opt/ecoom-direct-ads
+cp .env.example .env
+# Edita .env com GCP + FRONTEND_URL
+# Coloca service account JSON e define:
+# GOOGLE_APPLICATION_CREDENTIALS=/opt/ecoom-direct-ads/gcp-sa.json
+
+npm install
+bash scripts/deploy-vps.sh
+```
+
+Expõe a porta **8787** (nginx reverse proxy recomendado → `https://api.teu-dominio.com`).
+
+Teste: `curl https://api.teu-dominio.com/health`
+
+### 3. Vercel — frontend
+
+Frontend estático em `web/` — **já deployado**:
+
+- **https://web-liard-pi-k8e9ujwuis.vercel.app**
+
+Antes de usar, aponta a API:
+
+```bash
+ECOOM_API_URL=https://api.teu-dominio.com bash scripts/inject-api-url.sh
+cd web && vercel deploy --prod
+```
+
+Ou edita `web/config.js` manualmente:
+
+```js
+window.ECOOM_API_URL = "https://api.teu-dominio.com";
+```
+
+No `.env` da VPS:
+
+```
+FRONTEND_URL=https://web-liard-pi-k8e9ujwuis.vercel.app
+```
+
+---
+
 ## Custos
 
 Usa os **$300 grátis** do Google Cloud (90 dias). Cada clip Veo ~$0,24–0,80 (8s, conforme modelo).

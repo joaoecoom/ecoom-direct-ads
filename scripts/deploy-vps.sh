@@ -39,8 +39,15 @@ git pull origin "$BRANCH"
 npm install --omit=dev
 
 if [ ! -f .env ]; then
-  echo "⚠️  Cria .env a partir de .env.example e configura GCP + FRONTEND_URL"
+  echo "⚠️  Cria .env a partir de .env.example"
   cp .env.example .env
+fi
+
+if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ] && [ ! -f gcp-sa.json ]; then
+  echo "⚠️  Na VPS precisas de service account GCP:"
+  echo "   1. GCP Console → IAM → Service Accounts → Create key (JSON)"
+  echo "   2. Copia para $APP_DIR/gcp-sa.json"
+  echo "   3. Adiciona ao .env: GOOGLE_APPLICATION_CREDENTIALS=$APP_DIR/gcp-sa.json"
 fi
 
 pm2 startOrRestart ecosystem.config.cjs

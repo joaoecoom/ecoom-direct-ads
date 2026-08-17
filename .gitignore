@@ -8,7 +8,7 @@ data/
 service-account*.json
 .DS_Store
 ._*
+web/.vercel/
 web/node_modules/
-web/.next/
 prompts/storyboard-*.json
 assets/run-*/
