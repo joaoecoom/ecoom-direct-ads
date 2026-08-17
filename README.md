@@ -121,6 +121,27 @@ A partir daí podes pedir no chat: *"Gera um vídeo Veo com este prompt..."*
 
 Repositório: **https://github.com/joaoecoom/ecoom-direct-ads**
 
+Frontend: **https://web-liard-pi-k8e9ujwuis.vercel.app**
+
+### CI/CD (GitHub Actions)
+
+| Workflow | Trigger | O quê faz |
+|----------|---------|-----------|
+| `deploy-vercel.yml` | push `main` (web/) | Deploy frontend Vercel |
+| `deploy-vps.yml` | push `main` (server/, src/) | `git pull` + PM2 na Contabo |
+
+**Secrets GitHub** (Settings → Secrets → Actions) — já configurados:
+
+| Secret | Valor |
+|--------|-------|
+| `VPS_HOST` | IP Contabo |
+| `VPS_USER` | root |
+| `VPS_PASSWORD` | *(password VPS)* |
+| `VERCEL_ORG_ID` | team id |
+| `VERCEL_PROJECT_ID` | project id |
+
+**Falta 1 secret manual:** `VERCEL_TOKEN` — cria em [vercel.com/account/tokens](https://vercel.com/account/tokens) e adiciona no GitHub. Depois disso, cada push a `main` faz deploy automático.
+
 ### Arquitectura
 
 ```

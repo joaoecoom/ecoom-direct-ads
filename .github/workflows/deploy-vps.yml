@@ -1,0 +1,32 @@
+name: Sync API (VPS)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "ecosystem.config.cjs"
+      - "scripts/vps-bootstrap.sh"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Contabo VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+            cd /opt/ecoom-direct-ads
+            git pull origin main
+            npm install --omit=dev
+            pm2 startOrRestart ecosystem.config.cjs
+            pm2 save

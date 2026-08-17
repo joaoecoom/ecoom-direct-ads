@@ -12,3 +12,4 @@ web/.vercel/
 web/node_modules/
 prompts/storyboard-*.json
 assets/run-*/
+.vercel

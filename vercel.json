@@ -1,4 +1,9 @@
 {
+  "version": 2,
+  "name": "ecoom-direct-ads",
+  "installCommand": "echo 'static frontend — no install'",
+  "buildCommand": "echo 'static frontend — no build'",
+  "outputDirectory": "web",
   "rewrites": [
     {
       "source": "/api/:path*",
