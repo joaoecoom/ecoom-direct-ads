@@ -89,7 +89,7 @@ app.post("/api/jobs", async (req, res) => {
   }
 
   const id = randomUUID().slice(0, 8);
-  const job = await createJob({
+  await createJob({
     id,
     request: { offer: offer.trim(), overrides },
   });
@@ -97,7 +97,40 @@ app.post("/api/jobs", async (req, res) => {
   queue.push(id);
   processQueue();
 
-  res.status(202).json({ jobId: id, status: "queued" });
+  res.status(202).json({ jobId: id, status: "queued", queueLength: queue.length });
+});
+
+/** Vários briefs de uma vez — processa em fila automática */
+app.post("/api/jobs/batch", async (req, res) => {
+  const { offers, overrides = {} } = req.body || {};
+  if (!Array.isArray(offers) || offers.length === 0) {
+    return res.status(400).json({ error: "Envia array 'offers' com pelo menos 1 brief." });
+  }
+  if (offers.length > 20) {
+    return res.status(400).json({ error: "Máximo 20 ads por batch." });
+  }
+
+  const jobIds = [];
+  for (const raw of offers) {
+    const offer = String(raw || "").trim();
+    if (!offer) continue;
+    const id = randomUUID().slice(0, 8);
+    await createJob({ id, request: { offer, overrides } });
+    queue.push(id);
+    jobIds.push(id);
+  }
+
+  if (jobIds.length === 0) {
+    return res.status(400).json({ error: "Nenhum brief válido no array." });
+  }
+
+  processQueue();
+  res.status(202).json({
+    jobIds,
+    count: jobIds.length,
+    status: "queued",
+    queueLength: queue.length,
+  });
 });
 
 async function processQueue() {
