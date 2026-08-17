@@ -144,3 +144,22 @@ export async function regenerateSceneImage(projectId, sceneId) {
   if (!res.ok) throw new Error(data.error || "Regeneração falhou");
   return data;
 }
+
+export async function animateAllVideos(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/videos/generate`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Animate All falhou");
+  return data;
+}
+
+export async function animateSceneVideo(projectId, sceneId) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/scenes/${sceneId}/video`,
+    { method: "POST" },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Animate falhou");
+  return data;
+}

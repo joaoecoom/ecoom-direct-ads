@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveAdConfig } from "../src/lib/ad-config.js";
 import { regenerateSceneImage, generateStoryboardImages } from "../src/lib/scene-images.js";
+import { animateAllSceneVideos, animateSceneVideo } from "../src/lib/scene-videos.js";
 import { runAdGeneration, PROJECT_ROOT } from "../src/run-ad-generation.js";
 import { createAsset, getAsset, resolveAssetFile } from "./asset-store.js";
 import {
@@ -10,6 +11,7 @@ import {
   getProject,
   linkAssetToScene,
   linkJobToProject,
+  linkVideoAssetToScene,
   updateProject,
   updateProjectScene,
 } from "./project-store.js";
@@ -33,7 +35,34 @@ export async function runJob(job, onProgress) {
   if (type === "blueprint") return runBlueprintJob(job, onProgress);
   if (type === "images") return runImagesJob(job, onProgress);
   if (type === "scene_image") return runSceneImageJob(job, onProgress);
+  if (type === "videos") return runVideosJob(job, onProgress);
+  if (type === "scene_video") return runSceneVideoJob(job, onProgress);
   return runFullAdJob(job, onProgress);
+}
+
+async function resolveSceneImagePath(project, scene) {
+  if (!scene?.imageAssetId) {
+    throw new Error(`Cena ${scene.id} sem imagem — gera imagens primeiro.`);
+  }
+  const asset = await getAsset(scene.imageAssetId);
+  if (!asset) throw new Error(`Asset imagem ${scene.imageAssetId} não encontrado`);
+  return resolveAssetFile(asset);
+}
+
+async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order }) {
+  const asset = await createAsset({
+    projectId,
+    sceneId,
+    type: "video",
+    source: "generated",
+    prompt,
+    sourcePath: clipPath,
+    ext: "mp4",
+    metadata: { jobId, order },
+  });
+  await linkVideoAssetToScene(projectId, sceneId, asset.id);
+  await addProjectAssetId(projectId, asset.id);
+  return asset;
 }
 
 async function runFullAdJob(job, onProgress) {
@@ -193,10 +222,152 @@ async function runSceneImageJob(job, onProgress) {
   return { assetId: asset.id, sceneId };
 }
 
+async function runVideosJob(job, onProgress) {
+  const { projectId } = job.request;
+  if (!projectId) throw new Error("projectId obrigatório");
+
+  let project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const { storyboard } = loadStoryboardForProject(project);
+  const adConfig = resolveAdConfig(project.settings || {});
+  const scenes = project.scenes || [];
+
+  if (!scenes.length) {
+    throw new Error("Sem cenas — gera blueprint primeiro.");
+  }
+
+  const missing = scenes.filter((s) => !s.imageAssetId);
+  if (missing.length) {
+    throw new Error(
+      `${missing.length} cena(s) sem imagem — Generate All Images primeiro.`,
+    );
+  }
+
+  const outputDir = path.join(
+    PROJECT_ROOT,
+    "output",
+    `project-${projectId}`,
+    `videos-${job.id}`,
+  );
+
+  await updateProject(projectId, {
+    scenes: scenes.map((s) => ({
+      ...s,
+      status: { ...s.status, video: "generating" },
+    })),
+  });
+
+  const getImagePath = async (scene) => {
+    project = (await getProject(projectId)) || project;
+    const fresh = project.scenes.find((s) => s.id === scene.id) || scene;
+    return resolveSceneImagePath(project, fresh);
+  };
+
+  const { clips } = await animateAllSceneVideos({
+    storyboard,
+    adConfig,
+    scenes,
+    getImagePath,
+    outputDir,
+    onProgress: (u) =>
+      onProgress?.({
+        step: u.step,
+        message: u.message,
+        sceneIndex: u.sceneIndex,
+        sceneTotal: u.sceneTotal,
+      }),
+  });
+
+  const videoAssetIds = [];
+  for (const clip of clips) {
+    const asset = await registerVideoAsset({
+      projectId,
+      sceneId: clip.sceneId,
+      clipPath: clip.path,
+      prompt: clip.prompt,
+      jobId: job.id,
+      order: clip.order,
+    });
+    videoAssetIds.push(asset.id);
+  }
+
+  return { videoAssetIds, clipCount: clips.length, outputDir };
+}
+
+async function runSceneVideoJob(job, onProgress) {
+  const { projectId, sceneId } = job.request;
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const { storyboard } = loadStoryboardForProject(project);
+  const adConfig = resolveAdConfig(project.settings || {});
+  const scenes = project.scenes || [];
+  const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
+  if (sceneIndex === -1) throw new Error(`Cena ${sceneId} não encontrada`);
+
+  const scene = scenes[sceneIndex];
+  const imagePath = await resolveSceneImagePath(project, scene);
+
+  let lastFramePath = null;
+  if (storyboard.style === "ugc" && sceneIndex < scenes.length - 1) {
+    const next = scenes[sceneIndex + 1];
+    if (next?.imageAssetId) {
+      lastFramePath = await resolveSceneImagePath(project, next);
+    }
+  }
+
+  await updateProjectScene(projectId, sceneId, {
+    status: { video: "generating" },
+  });
+
+  onProgress?.({
+    step: "video",
+    message: `A animar ${sceneId}...`,
+    sceneIndex: sceneIndex + 1,
+    sceneTotal: scenes.length,
+  });
+
+  const outputDir = path.join(
+    PROJECT_ROOT,
+    "output",
+    `project-${projectId}`,
+    `video-${job.id}`,
+  );
+
+  const clip = await animateSceneVideo({
+    storyboard,
+    adConfig,
+    scene,
+    sceneIndex,
+    sceneTotal: scenes.length,
+    imagePath,
+    lastFramePath,
+    outputDir,
+    runLabel: `veo-scene/${sceneId}`,
+  });
+
+  const asset = await registerVideoAsset({
+    projectId,
+    sceneId,
+    clipPath: clip.path,
+    prompt: clip.prompt,
+    jobId: job.id,
+    order: sceneIndex,
+  });
+
+  return { assetId: asset.id, sceneId, clipPath: clip.path };
+}
+
 export async function persistJobProgress(jobId, update) {
   await updateJob(jobId, {
     status: "running",
-    progress: { step: update.step, message: update.message },
+    progress: {
+      step: update.step,
+      message: update.message,
+      sceneIndex: update.sceneIndex,
+      sceneTotal: update.sceneTotal,
+    },
   });
 }
 

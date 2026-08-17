@@ -207,6 +207,29 @@
             <div id="images-error" class="card error hidden"></div>
             <div id="scene-images-grid" class="scene-images-grid"></div>
           </div>
+
+          <div id="panel-videos" class="workspace-panel hidden">
+            <div class="images-toolbar card">
+              <div>
+                <h2>Scene Videos</h2>
+                <p id="videos-status" class="muted">Animate All — usa imagens existentes, sem regenerar.</p>
+              </div>
+              <div class="images-actions">
+                <button type="button" class="btn primary sm" id="btn-animate-all" disabled>
+                  Animate All
+                </button>
+              </div>
+            </div>
+            <div id="videos-progress" class="progress-wrap card">
+              <div class="progress-head">
+                <span>Animating scenes...</span>
+                <span id="videos-progress-label">0 / 0</span>
+              </div>
+              <div class="progress-track"><div id="videos-progress-bar" class="progress-bar"></div></div>
+            </div>
+            <div id="videos-error" class="card error hidden"></div>
+            <div id="scene-videos-grid" class="scene-images-grid"></div>
+          </div>
         </section>
 
         <!-- LIBRARY -->

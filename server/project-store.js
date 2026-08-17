@@ -89,6 +89,13 @@ export async function linkAssetToScene(projectId, sceneId, assetId) {
   });
 }
 
+export async function linkVideoAssetToScene(projectId, sceneId, assetId) {
+  return updateProjectScene(projectId, sceneId, {
+    videoAssetId: assetId,
+    status: { video: "done" },
+  });
+}
+
 export async function addProjectAssetId(projectId, assetId) {
   const project = await getProject(projectId);
   if (!project) return null;

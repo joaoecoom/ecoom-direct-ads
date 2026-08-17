@@ -73,6 +73,7 @@ app.get("/api/config", (_req, res) => {
     features: {
       projects: true,
       assets: true,
+      videos: true,
       maxSceneCount: Math.max(...AD_SCENE_COUNTS),
     },
   });
@@ -243,6 +244,50 @@ app.post("/api/projects/:id/scenes/:sceneId/image", async (req, res) => {
     jobId: id,
     status: "queued",
     type: "scene_image",
+    sceneId: req.params.sceneId,
+  });
+});
+
+app.post("/api/projects/:id/videos/generate", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const scenes = project.scenes || [];
+  if (!scenes.length) {
+    return res.status(400).json({ error: "Gera blueprint e imagens primeiro" });
+  }
+
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "videos",
+    request: { type: "videos", projectId: req.params.id },
+  });
+
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "videos", sceneCount: scenes.length });
+});
+
+app.post("/api/projects/:id/scenes/:sceneId/video", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "scene_video",
+    request: {
+      type: "scene_video",
+      projectId: req.params.id,
+      sceneId: req.params.sceneId,
+    },
+  });
+
+  enqueue(id);
+  res.status(202).json({
+    jobId: id,
+    status: "queued",
+    type: "scene_video",
     sceneId: req.params.sceneId,
   });
 });
