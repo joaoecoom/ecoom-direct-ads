@@ -1,0 +1,23 @@
+{
+  "aspectRatio": "9:16",
+  "durationSeconds": 6,
+  "model": "veo-3.1-fast-generate-001",
+  "outputFileName": "anuncio-3-cenas.mp4",
+  "scenes": [
+    {
+      "id": "hook",
+      "image": "assets/cena1.png",
+      "prompt": "Slow cinematic zoom in, subtle camera push, dramatic lighting, vertical ad"
+    },
+    {
+      "id": "produto",
+      "image": "assets/cena2.png",
+      "prompt": "Product hero shot, gentle rotation, soft golden light, premium feel"
+    },
+    {
+      "id": "cta",
+      "image": "assets/cena3.png",
+      "prompt": "Happy person smiling, natural movement, warm lifestyle lighting, call to action mood"
+    }
+  ]
+}

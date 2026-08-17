@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ecoom Direct ADS</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Ecoom Direct ADS</h1>
+      <p class="subtitle">
+        Descreve a oferta — storyboard, imagens UGC, vídeo Veo e copy automáticos.
+        <span class="badges">
+          <span class="badge">PT-BR</span>
+          <span class="badge">English</span>
+          <span class="badge">UGC</span>
+        </span>
+      </p>
+
+      <form id="ad-form" class="card">
+        <label for="offer">Brief da oferta</label>
+        <textarea
+          id="offer"
+          required
+          placeholder="Ex: Suplemento de vitamina D para energia no inverno — médico amigável UGC"
+        ></textarea>
+
+        <div class="grid">
+          <div>
+            <label for="language">Idioma</label>
+            <select id="language"></select>
+          </div>
+          <div>
+            <label for="variant">Variante</label>
+            <select id="variant"></select>
+          </div>
+          <div>
+            <label for="format">Formato</label>
+            <select id="format"></select>
+          </div>
+          <div>
+            <label for="scenes">Cenas</label>
+            <select id="scenes"></select>
+          </div>
+          <div>
+            <label for="duration">Duração/clip</label>
+            <select id="duration"></select>
+          </div>
+          <div>
+            <label for="resolution">Resolução</label>
+            <select id="resolution"></select>
+          </div>
+        </div>
+
+        <button type="submit" class="primary" id="submit-btn">Gerar anúncio</button>
+      </form>
+
+      <div id="error" class="card error hidden"></div>
+
+      <div id="job-panel" class="card hidden">
+        <div class="status">
+          <span id="status-dot" class="dot"></span>
+          <div>
+            <strong id="job-title"></strong>
+            <div id="job-message" class="muted"></div>
+          </div>
+        </div>
+        <div id="video-wrap" class="video-wrap hidden">
+          <video id="result-video" controls playsinline></video>
+        </div>
+        <h3 id="copy-heading" class="hidden">Copy</h3>
+        <div id="copy-block" class="copy-block hidden"></div>
+      </div>
+    </main>
+    <script src="/config.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

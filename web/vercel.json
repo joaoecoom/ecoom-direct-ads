@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/config.js",
+      "destination": "/config.js"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ]
+}

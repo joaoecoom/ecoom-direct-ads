@@ -1,0 +1,37 @@
+{
+  "name": "ecoom-direct-ads",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Geração automática de vídeos com Google Veo via Vertex AI",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "bash scripts/setup.sh",
+    "setup:finish": "bash scripts/finish-setup.sh",
+    "video": "node src/generate-video.js",
+    "video:batch": "node src/generate-batch.js",
+    "sequence": "node src/generate-sequence.js",
+    "ad": "node src/generate-ad.js --style ugc --scenes 3 --duration 8 --format 9:16 --resolution 1080p",
+    "ad:one": "node src/generate-ad.js --scenes 1 --duration 8 --style ugc --format 9:16 --resolution 1080p",
+    "ad:ptbr": "node src/generate-ad.js --lang pt --variant pt-BR --style ugc --scenes 3 --duration 8 --format 9:16 --resolution 1080p",
+    "ad:ptbr:one": "node src/generate-ad.js --lang pt --variant pt-BR --scenes 1 --duration 8 --style ugc --format 9:16 --resolution 1080p",
+    "ad:en": "node src/generate-ad.js --lang en --variant en --style ugc --scenes 3 --duration 8 --format 9:16 --resolution 1080p",
+    "ad:en:one": "node src/generate-ad.js --lang en --variant en --scenes 1 --duration 8 --style ugc --format 9:16 --resolution 1080p",
+    "storyboard": "node src/generate-ad.js --storyboard-only",
+    "voice:add": "node src/add-voice-to-run.js",
+    "check": "node src/check-setup.js",
+    "api": "node server/index.js",
+    "api:dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
+    "@google-cloud/text-to-speech": "^5.8.1",
+    "@google/genai": "^1.29.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "openai": "^7.4.0"
+  }
+}

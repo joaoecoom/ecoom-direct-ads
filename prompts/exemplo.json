@@ -1,0 +1,23 @@
+[
+  {
+    "id": "hook-01",
+    "prompt": "Cinematic vertical ad hook, frustrated person looking at phone screen showing low sales, dramatic lighting, slow zoom in, photorealistic, 9:16",
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "outputFileName": "01-hook.mp4"
+  },
+  {
+    "id": "product-02",
+    "prompt": "Premium e-commerce product hero shot, elegant skincare bottle rotating slowly on white marble, soft studio lighting, luxury aesthetic, 9:16 vertical",
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "outputFileName": "02-product.mp4"
+  },
+  {
+    "id": "cta-03",
+    "prompt": "Happy customer unboxing premium package at home, warm natural light, genuine smile, lifestyle ad ending, 9:16 vertical video",
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "outputFileName": "03-cta.mp4"
+  }
+]

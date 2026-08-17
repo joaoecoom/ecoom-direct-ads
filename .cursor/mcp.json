@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "vertex-ai": {
+      "command": "npx",
+      "args": ["-y", "vertex-ai-mcp"],
+      "env": {
+        "GOOGLE_PROJECT_ID": "project-1f0c9cb1-6e86-47fe-a34",
+        "GOOGLE_LOCATION": "us-central1"
+      }
+    }
+  }
+}
