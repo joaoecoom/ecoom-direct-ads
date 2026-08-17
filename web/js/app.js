@@ -9,7 +9,8 @@ import {
   updateProject,
 } from "./projects.js";
 import { destroyCreateAd, initCreateAd, refreshCreateAdForm } from "./create-ad.js";
-import { fetchHealth, fetchProjectStoryboard } from "./api.js";
+import { destroyImagesTab, initImagesTab, renderImagesPanel } from "./images.js";
+import { assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
 
 const views = {
   projects: document.getElementById("view-projects"),
@@ -30,6 +31,9 @@ const apiStatusEl = document.getElementById("api-status");
 
 let currentProjectId = null;
 let createAdInitialized = false;
+let imagesTabInitialized = false;
+let imagesTabProjectId = null;
+let activeWorkspaceTab = "create";
 
 function parseRoute() {
   const hash = location.hash.replace(/^#/, "") || "/projects";
@@ -70,6 +74,7 @@ function renderRoute() {
       break;
     case "library":
       views.library?.classList.remove("hidden");
+      void renderLibrary();
       break;
     case "templates":
       views.templates?.classList.remove("hidden");
@@ -150,6 +155,11 @@ function renderProjectWorkspace(id) {
   document.getElementById("project-subtitle").textContent =
     project.masterPrompt?.slice(0, 120) || "Define o Master Creative Prompt abaixo";
 
+  if (imagesTabProjectId !== id) {
+    imagesTabInitialized = false;
+    imagesTabProjectId = id;
+  }
+
   if (!createAdInitialized) {
     initCreateAd(id);
     createAdInitialized = true;
@@ -158,7 +168,69 @@ function renderProjectWorkspace(id) {
   }
 
   renderProjectTabs(id);
+  switchWorkspaceTab(activeWorkspaceTab);
   void renderBlueprint(id);
+}
+
+function switchWorkspaceTab(tab) {
+  activeWorkspaceTab = tab;
+  document.querySelectorAll(".workspace-panel").forEach((p) => p.classList.add("hidden"));
+  document.getElementById(`panel-${tab}`)?.classList.remove("hidden");
+
+  document.querySelectorAll("#workspace-tabs .tab[data-tab]").forEach((el) => {
+    el.classList.toggle("active", el.dataset.tab === tab);
+  });
+
+  if (tab === "images" && currentProjectId) {
+    if (!imagesTabInitialized) {
+      initImagesTab(currentProjectId);
+      imagesTabInitialized = true;
+    } else {
+      void renderImagesPanel(currentProjectId);
+    }
+  }
+}
+
+async function renderLibrary() {
+  const grid = document.getElementById("library-grid");
+  if (!grid) return;
+
+  const projects = listProjects();
+  if (!projects.length) {
+    grid.innerHTML = `<div class="placeholder card"><p>Sem assets ainda.</p></div>`;
+    return;
+  }
+
+  const allAssets = [];
+  for (const p of projects.slice(0, 10)) {
+    try {
+      const { assets } = await fetchProjectAssets(p.id);
+      for (const a of assets || []) {
+        allAssets.push({ ...a, projectName: p.name });
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  if (!allAssets.length) {
+    grid.innerHTML = `<div class="placeholder card"><p>Gera imagens num projecto para ver assets aqui.</p></div>`;
+    return;
+  }
+
+  grid.innerHTML = allAssets
+    .slice(0, 24)
+    .map(
+      (a) => `
+    <article class="scene-card card">
+      <div class="scene-card-head"><strong>${escapeHtml(a.projectName)}</strong></div>
+      <div class="scene-thumb">
+        <img src="${assetFileUrl(a.id)}" alt="" loading="lazy" />
+      </div>
+      <p class="scene-prompt muted">${escapeHtml(a.sceneId || a.source)} · ${escapeHtml(a.source)}</p>
+    </article>`,
+    )
+    .join("");
 }
 
 async function renderBlueprint(projectId) {
@@ -214,11 +286,15 @@ function renderProjectTabs(id) {
 
   tabsEl.innerHTML = `
     <button type="button" class="tab active" data-tab="create">Create Ad</button>
-    <button type="button" class="tab disabled" title="Fase 3">Images</button>
+    <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab disabled" title="Fase 4">Videos</button>
     <button type="button" class="tab disabled" title="Fase 5">Timeline</button>
     <button type="button" class="tab disabled" title="Fase 7">Export</button>
-    <span class="tab-meta">${jobs} job(s)</span>`;
+    <span class="tab-meta">${jobs} job(s) · ${project?.scenes?.length || 0} cenas</span>`;
+
+  tabsEl.querySelectorAll(".tab[data-tab]:not(.disabled)").forEach((btn) => {
+    btn.onclick = () => switchWorkspaceTab(btn.dataset.tab);
+  });
 }
 
 function escapeHtml(str) {
@@ -263,6 +339,9 @@ async function checkApiStatus() {
 }
 
 document.getElementById("btn-new-project")?.addEventListener("click", openNewProjectModal);
+document.getElementById("goto-images-tab")?.addEventListener("click", () => {
+  if (currentProjectId) switchWorkspaceTab("images");
+});
 document.getElementById("sidebar-new-project")?.addEventListener("click", openNewProjectModal);
 document.getElementById("modal-cancel")?.addEventListener("click", closeNewProjectModal);
 modal?.addEventListener("click", (e) => {
@@ -345,7 +424,13 @@ window.addEventListener("ecoom:job-complete", async (e) => {
   if (currentProjectId && e.detail?.projectId === currentProjectId) {
     renderProjectWorkspace(currentProjectId);
     renderSidebarProjects();
+    if (activeWorkspaceTab === "images") {
+      void renderImagesPanel(currentProjectId);
+    }
   }
 });
 
-window.addEventListener("beforeunload", () => destroyCreateAd());
+window.addEventListener("beforeunload", () => {
+  destroyCreateAd();
+  destroyImagesTab();
+});

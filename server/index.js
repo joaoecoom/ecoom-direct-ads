@@ -15,22 +15,33 @@ import {
   AD_TONES,
   LANGUAGE_VARIANTS,
 } from "../src/lib/ad-config.js";
-import { runAdGeneration } from "../src/run-ad-generation.js";
 import { createJob, getJob, listJobs, updateJob } from "./job-store.js";
 import {
+  createAsset,
+  deleteAsset,
+  getAsset,
+  listAssetsByProject,
+  resolveAssetFile,
+} from "./asset-store.js";
+import {
+  addProjectAssetId,
   createProject,
   deleteProject,
   duplicateProject,
   getProject,
-  linkJobToProject,
+  linkAssetToScene,
   listProjects,
   updateProject,
 } from "./project-store.js";
+import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const PORT = Number.parseInt(process.env.PORT || "8787", 10);
 const FRONTEND_URL = process.env.FRONTEND_URL || "*";
+
+let activeJobId = null;
+const queue = [];
 
 const app = express();
 app.use(
@@ -38,10 +49,12 @@ app.use(
     origin: FRONTEND_URL === "*" ? true : FRONTEND_URL.split(",").map((s) => s.trim()),
   }),
 );
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "8mb" }));
 
-let activeJobId = null;
-const queue = [];
+const enqueue = (id) => {
+  queue.push(id);
+  processQueue();
+};
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "ecoom-direct-ads-api", activeJobId });
@@ -59,6 +72,7 @@ app.get("/api/config", (_req, res) => {
     styles: AD_STYLES,
     features: {
       projects: true,
+      assets: true,
       maxSceneCount: Math.max(...AD_SCENE_COUNTS),
     },
   });
@@ -107,6 +121,7 @@ app.get("/api/projects/:id/storyboard", async (req, res) => {
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
 
   const storyboardPath =
+    project.blueprintPath ||
     project.latestCreative?.storyboardPath ||
     project.creatives?.slice(-1)[0]?.storyboardPath;
 
@@ -116,6 +131,120 @@ app.get("/api/projects/:id/storyboard", async (req, res) => {
 
   const raw = fs.readFileSync(storyboardPath, "utf8");
   res.json(JSON.parse(raw));
+});
+
+app.get("/api/projects/:id/assets", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  const assets = await listAssetsByProject(req.params.id);
+  res.json({ assets, scenes: project.scenes || [] });
+});
+
+app.post("/api/projects/:id/assets", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const { data, filename, sceneId, mimeType } = req.body || {};
+  if (!data) return res.status(400).json({ error: "Campo 'data' (base64) obrigatório" });
+
+  const buffer = Buffer.from(data, "base64");
+  if (buffer.length > 6 * 1024 * 1024) {
+    return res.status(400).json({ error: "Imagem demasiado grande (max 6MB)" });
+  }
+
+  const ext = (filename || "upload.png").split(".").pop() || "png";
+  const asset = await createAsset({
+    projectId: req.params.id,
+    sceneId: sceneId || null,
+    type: "image",
+    source: "upload",
+    prompt: filename || "upload",
+    fileBuffer: buffer,
+    ext,
+    metadata: { mimeType: mimeType || "image/png", originalName: filename },
+  });
+
+  await addProjectAssetId(req.params.id, asset.id);
+  if (sceneId) await linkAssetToScene(req.params.id, sceneId, asset.id);
+
+  res.status(201).json(asset);
+});
+
+app.get("/api/assets/:id/file", async (req, res) => {
+  const asset = await getAsset(req.params.id);
+  if (!asset) return res.status(404).json({ error: "Asset não encontrado" });
+  if (!fs.existsSync(asset.filePath)) {
+    return res.status(404).json({ error: "Ficheiro não encontrado" });
+  }
+  res.sendFile(resolveAssetFile(asset));
+});
+
+app.delete("/api/assets/:id", async (req, res) => {
+  const ok = await deleteAsset(req.params.id);
+  if (!ok) return res.status(404).json({ error: "Asset não encontrado" });
+  res.status(204).end();
+});
+
+app.post("/api/projects/:id/blueprint", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const offer = (req.body?.offer || project.masterPrompt || "").trim();
+  if (!offer) return res.status(400).json({ error: "Master prompt em falta" });
+
+  const overrides = { ...project.settings, ...req.body?.overrides };
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "blueprint",
+    request: { type: "blueprint", offer, overrides, projectId: req.params.id },
+  });
+
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "blueprint" });
+});
+
+app.post("/api/projects/:id/images/generate", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  if (!project.blueprintPath && !project.latestCreative?.storyboardPath) {
+    return res.status(400).json({ error: "Gera o blueprint primeiro" });
+  }
+
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "images",
+    request: { type: "images", projectId: req.params.id, overrides: project.settings },
+  });
+
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "images" });
+});
+
+app.post("/api/projects/:id/scenes/:sceneId/image", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "scene_image",
+    request: {
+      type: "scene_image",
+      projectId: req.params.id,
+      sceneId: req.params.sceneId,
+    },
+  });
+
+  enqueue(id);
+  res.status(202).json({
+    jobId: id,
+    status: "queued",
+    type: "scene_image",
+    sceneId: req.params.sceneId,
+  });
 });
 
 app.get("/api/jobs", async (_req, res) => {
@@ -165,11 +294,16 @@ app.post("/api/jobs", async (req, res) => {
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
-    request: { offer: offer.trim(), overrides, projectId: projectId || null },
+    type: "full_ad",
+    request: {
+      type: "full_ad",
+      offer: offer.trim(),
+      overrides,
+      projectId: projectId || null,
+    },
   });
 
-  queue.push(id);
-  processQueue();
+  enqueue(id);
 
   res.status(202).json({ jobId: id, status: "queued", queueLength: queue.length, projectId });
 });
@@ -219,52 +353,20 @@ async function processQueue() {
 
     await updateJob(jobId, {
       status: "running",
-      progress: { step: "starting", message: "A iniciar pipeline..." },
+      progress: { step: "starting", message: "A iniciar..." },
     });
 
-    const { offer, overrides } = job.request;
-
-    const result = await runAdGeneration({
-      offer,
-      overrides,
-      runId: jobId,
-      onProgress: async (update) => {
-        await updateJob(jobId, {
-          status: "running",
-          progress: { step: update.step, message: update.message },
-        });
-      },
+    const result = await runJob(job, async (update) => {
+      await persistJobProgress(jobId, update);
     });
 
     await updateJob(jobId, {
       status: "completed",
       progress: { step: "done", message: "Concluído" },
-      result: {
-        finalVideo: result.finalVideo,
-        copyPath: result.copyPath,
-        copy: result.copy,
-        storyboardPath: result.storyboardPath,
-        title: result.storyboard?.title,
-        storyboard: result.storyboard,
-      },
+      result,
     });
-
-    const projectId = job.request?.projectId;
-    if (projectId) {
-      await linkJobToProject(projectId, jobId, {
-        title: result.storyboard?.title,
-        storyboardPath: result.storyboardPath,
-        finalVideo: result.finalVideo,
-        copyPath: result.copyPath,
-        status: "completed",
-      });
-    }
   } catch (err) {
-    await updateJob(jobId, {
-      status: "failed",
-      error: err.message,
-      progress: { step: "error", message: err.message },
-    });
+    await persistJobFailed(jobId, err);
   } finally {
     activeJobId = null;
     processQueue();

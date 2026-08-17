@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { ensureOutputDir, loadConfig, sleep, timestampSlug } from "./config.js";
 import { formatAdConfigSummary, resolveAdConfig } from "./lib/ad-config.js";
 import { generateSceneVoiceovers } from "./lib/tts.js";
-import { generateImage, generateImageVariation } from "./lib/imagen.js";
+import { generateStoryboardImages } from "./lib/scene-images.js";
 import {
   buildFlowMotionPrompt,
   buildVeoMotionPromptWithDialogue,
@@ -68,8 +68,20 @@ export async function runAdGeneration({
   const isUgc = storyboard.style === "ugc";
   const sceneTotal = storyboard.scenes.length;
 
+  const { images: generatedImages } = await generateStoryboardImages({
+    storyboard,
+    adConfig,
+    outputDir: assetsRunDir,
+    onProgress: (update) => {
+      progress("image", update.message, {
+        sceneIndex: update.sceneIndex,
+        sceneTotal: update.sceneTotal,
+        sceneId: update.sceneId,
+      });
+    },
+  });
+
   const sequenceScenes = [];
-  let previousImagePath = null;
 
   const ttsEngine = process.env.TTS_ENGINE || "auto";
   const veoAudioEnabled = process.env.VEO_GENERATE_AUDIO !== "false";
@@ -85,41 +97,7 @@ export async function runAdGeneration({
   for (let i = 0; i < storyboard.scenes.length; i++) {
     const scene = storyboard.scenes[i];
     const id = scene.id || `parte-${i + 1}`;
-    const imageFile = path.join(assetsRunDir, `${id}.png`);
-
-    progress("image", `Imagem ${i + 1}/${sceneTotal}: ${id}`, {
-      sceneIndex: i + 1,
-      sceneTotal,
-      sceneId: id,
-    });
-
-    if (isUgc && i === 0) {
-      await generateImage({
-        prompt: scene.imagePrompt,
-        outputPath: imageFile,
-        aspectRatio,
-        ugc: true,
-      });
-    } else if (isUgc && previousImagePath) {
-      await sleep(4000);
-      await generateImageVariation({
-        prompt: scene.visualBeat || scene.imagePrompt,
-        referenceImagePath: previousImagePath,
-        outputPath: imageFile,
-        aspectRatio,
-        sceneIndex: i + 1,
-        sceneTotal,
-      });
-    } else {
-      await generateImage({
-        prompt: scene.imagePrompt,
-        outputPath: imageFile,
-        aspectRatio,
-        ugc: isUgc,
-      });
-    }
-
-    previousImagePath = imageFile;
+    const imageFile = generatedImages[i]?.path || path.join(assetsRunDir, `${id}.png`);
 
     const motionBase = stripDialogueFromMotionPrompt(
       scene.motionPrompt ||
@@ -145,8 +123,6 @@ export async function runAdGeneration({
       durationSeconds: clipDuration,
       resolution,
     });
-
-    if (i < sceneTotal - 1) await sleep(3000);
   }
 
   const slug = (storyboard.title || "ugc")

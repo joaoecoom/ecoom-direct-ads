@@ -75,7 +75,7 @@
 
           <div id="workspace-tabs" class="workspace-tabs"></div>
 
-          <div class="create-workspace">
+          <div id="panel-create" class="workspace-panel create-workspace">
             <div class="create-hero card">
               <p class="eyebrow">Master Creative Prompt</p>
               <h2>What do you want to create?</h2>
@@ -145,9 +145,7 @@
               </div>
 
               <div class="create-actions">
-                <span class="action-chip disabled" title="Fase 3">Image</span>
-                <span class="action-chip disabled" title="Fase 4">Video</span>
-                <span class="action-chip disabled" title="Fase 3">Upload</span>
+                <button type="button" class="btn sm" id="goto-images-tab">Images →</button>
                 <button type="submit" class="btn primary lg" id="submit-btn">Generate Creative</button>
               </div>
             </form>
@@ -181,12 +179,33 @@
             </div>
 
             <div class="roadmap card muted-box">
-              <strong>Próximas fases</strong>
+              <strong>Fluxo recomendado</strong>
               <p class="muted">
-                Images → Animate All → Timeline → Regeneração parcial → Rebuild final.
-                O pipeline actual continua intacto.
+                1) Master Prompt → 2) Tab <strong>Images</strong> → Blueprint → Generate All Images →
+                3) Generate Creative (vídeo completo) ou Fase 4 Animate All.
               </p>
             </div>
+          </div>
+
+          <div id="panel-images" class="workspace-panel hidden">
+            <div class="images-toolbar card">
+              <div>
+                <h2>Scene Images</h2>
+                <p id="images-status" class="muted">Gera prompts automáticos por cena a partir do blueprint.</p>
+              </div>
+              <div class="images-actions">
+                <button type="button" class="btn sm" id="btn-gen-blueprint">Generate Blueprint</button>
+                <button type="button" class="btn primary sm" id="btn-gen-all-images" disabled>
+                  Generate All Images
+                </button>
+                <label class="btn sm upload-label">
+                  Upload
+                  <input type="file" id="upload-asset-input" accept="image/*" multiple hidden />
+                </label>
+              </div>
+            </div>
+            <div id="images-error" class="card error hidden"></div>
+            <div id="scene-images-grid" class="scene-images-grid"></div>
           </div>
         </section>
 
@@ -196,9 +215,7 @@
             <h1>Library</h1>
             <p class="muted">Imagens, vídeos, produtos e personagens — Fase 3.</p>
           </header>
-          <div class="placeholder card">
-            <p>Assets gerados e uploads aparecerão aqui.</p>
-          </div>
+          <div id="library-grid" class="scene-images-grid"></div>
         </section>
 
         <!-- TEMPLATES -->

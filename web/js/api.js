@@ -93,3 +93,54 @@ export async function fetchProjectStoryboard(projectId) {
   if (!res.ok) return null;
   return res.json();
 }
+
+export async function fetchProjectAssets(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/assets`);
+  if (!res.ok) throw new Error("Assets indisponíveis");
+  return res.json();
+}
+
+export function assetFileUrl(assetId) {
+  return `${API_URL}/api/assets/${assetId}/file`;
+}
+
+export async function uploadAsset(projectId, payload) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/assets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Upload falhou");
+  return data;
+}
+
+export async function generateBlueprint(projectId, body = {}) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/blueprint`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Blueprint falhou");
+  return data;
+}
+
+export async function generateAllImages(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/images/generate`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Geração de imagens falhou");
+  return data;
+}
+
+export async function regenerateSceneImage(projectId, sceneId) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/scenes/${sceneId}/image`,
+    { method: "POST" },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Regeneração falhou");
+  return data;
+}

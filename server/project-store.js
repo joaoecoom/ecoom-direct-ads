@@ -32,7 +32,70 @@ function normalizeProject(raw) {
     settings: { ...DEFAULT_PROJECT_SETTINGS, ...raw.settings },
     jobIds: raw.jobIds || [],
     creatives: raw.creatives || [],
+    scenes: raw.scenes || [],
+    assetIds: raw.assetIds || [],
+    blueprintPath: raw.blueprintPath || null,
+    blueprint: raw.blueprint || null,
   };
+}
+
+export function storyboardToScenes(storyboard) {
+  return (storyboard.scenes || []).map((s, i) => ({
+    id: s.id || `parte-${i + 1}`,
+    order: i,
+    role: s.role || "",
+    imagePrompt: s.imagePrompt || "",
+    motionPrompt: s.motionPrompt || "",
+    voiceoverLine: s.voiceoverLine || "",
+    visualBeat: s.visualBeat || "",
+    onScreenText: s.onScreenText || "",
+    imageAssetId: null,
+    videoAssetId: null,
+    status: { prompt: "done", image: "pending", video: "pending" },
+  }));
+}
+
+export async function applyBlueprint(projectId, { storyboardPath, storyboard }) {
+  return updateProject(projectId, {
+    blueprintPath: storyboardPath,
+    blueprint: {
+      title: storyboard.title,
+      hook: storyboard.hook,
+      sceneCount: storyboard.scenes?.length || 0,
+    },
+    scenes: storyboardToScenes(storyboard),
+  });
+}
+
+export async function updateProjectScene(projectId, sceneId, patch) {
+  const project = await getProject(projectId);
+  if (!project) throw new Error(`Project ${projectId} não encontrado`);
+  const scenes = project.scenes.map((s) =>
+    s.id === sceneId
+      ? {
+          ...s,
+          ...patch,
+          status: patch.status ? { ...s.status, ...patch.status } : s.status,
+        }
+      : s,
+  );
+  return updateProject(projectId, { scenes });
+}
+
+export async function linkAssetToScene(projectId, sceneId, assetId) {
+  return updateProjectScene(projectId, sceneId, {
+    imageAssetId: assetId,
+    status: { image: "done" },
+  });
+}
+
+export async function addProjectAssetId(projectId, assetId) {
+  const project = await getProject(projectId);
+  if (!project) return null;
+  const assetIds = project.assetIds.includes(assetId)
+    ? project.assetIds
+    : [...project.assetIds, assetId];
+  return updateProject(projectId, { assetIds });
 }
 
 export async function createProject(payload = {}) {

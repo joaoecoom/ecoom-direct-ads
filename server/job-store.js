@@ -17,6 +17,7 @@ export async function createJob(payload) {
   await ensureJobsDir();
   const job = {
     id: payload.id,
+    type: payload.type || payload.request?.type || "full_ad",
     status: "queued",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
