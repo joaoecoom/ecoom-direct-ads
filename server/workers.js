@@ -12,10 +12,13 @@ import {
   linkAssetToScene,
   linkJobToProject,
   linkVideoAssetToScene,
+  setProjectExport,
   updateProject,
   updateProjectScene,
 } from "./project-store.js";
 import { updateJob } from "./job-store.js";
+import { rebuildTimelineVideo } from "../src/lib/timeline-rebuild.js";
+import { resolveSceneVideoPath } from "./timeline.js";
 
 export function loadStoryboardForProject(project) {
   const storyboardPath =
@@ -37,6 +40,7 @@ export async function runJob(job, onProgress) {
   if (type === "scene_image") return runSceneImageJob(job, onProgress);
   if (type === "videos") return runVideosJob(job, onProgress);
   if (type === "scene_video") return runSceneVideoJob(job, onProgress);
+  if (type === "rebuild") return runRebuildJob(job, onProgress);
   return runFullAdJob(job, onProgress);
 }
 
@@ -357,6 +361,67 @@ async function runSceneVideoJob(job, onProgress) {
   });
 
   return { assetId: asset.id, sceneId, clipPath: clip.path };
+}
+
+async function runRebuildJob(job, onProgress) {
+  const { projectId } = job.request;
+  if (!projectId) throw new Error("projectId obrigatório");
+
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const { storyboard } = loadStoryboardForProject(project);
+  const scenes = [...(project.scenes || [])].sort((a, b) => a.order - b.order);
+
+  if (!scenes.length) throw new Error("Sem cenas na timeline.");
+
+  const missing = scenes.filter((s) => !s.videoAssetId);
+  if (missing.length) {
+    throw new Error(`${missing.length} cena(s) sem clip — Animate All primeiro.`);
+  }
+
+  await updateProject(projectId, { timelineStatus: "building" });
+
+  onProgress?.({ step: "rebuild", message: "A recolher clips..." });
+
+  const clipPaths = [];
+  for (const scene of scenes) {
+    clipPaths.push(await resolveSceneVideoPath(scene));
+  }
+
+  const outputDir = path.join(PROJECT_ROOT, "output", `project-${projectId}`);
+  const finalPath = path.join(outputDir, `export-${job.id}.mp4`);
+
+  const result = await rebuildTimelineVideo({
+    clipPaths,
+    outputPath: finalPath,
+    storyboard,
+    onProgress,
+  });
+
+  const exportAsset = await createAsset({
+    projectId,
+    type: "video",
+    source: "export",
+    prompt: project.blueprint?.title || "Final export",
+    sourcePath: result.finalVideo,
+    ext: "mp4",
+    metadata: { export: true, jobId: job.id, clipCount: result.clipCount },
+  });
+
+  await addProjectAssetId(projectId, exportAsset.id);
+  await setProjectExport(projectId, {
+    assetId: exportAsset.id,
+    jobId: job.id,
+    finalVideo: result.finalVideo,
+  });
+
+  return {
+    finalVideo: result.finalVideo,
+    exportAssetId: exportAsset.id,
+    clipCount: result.clipCount,
+    crossfadeSeconds: result.crossfadeSeconds,
+  };
 }
 
 export async function persistJobProgress(jobId, update) {

@@ -11,6 +11,7 @@ import {
 import { destroyCreateAd, initCreateAd, refreshCreateAdForm } from "./create-ad.js";
 import { destroyImagesTab, initImagesTab, renderImagesPanel } from "./images.js";
 import { destroyVideosTab, initVideosTab, renderVideosPanel } from "./videos.js";
+import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./timeline.js";
 import { assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
 
 const views = {
@@ -36,6 +37,8 @@ let imagesTabInitialized = false;
 let imagesTabProjectId = null;
 let videosTabInitialized = false;
 let videosTabProjectId = null;
+let timelineTabInitialized = false;
+let timelineTabProjectId = null;
 let activeWorkspaceTab = "create";
 
 function parseRoute() {
@@ -166,6 +169,10 @@ function renderProjectWorkspace(id) {
     videosTabInitialized = false;
     videosTabProjectId = id;
   }
+  if (timelineTabProjectId !== id) {
+    timelineTabInitialized = false;
+    timelineTabProjectId = id;
+  }
 
   if (!createAdInitialized) {
     initCreateAd(id);
@@ -203,6 +210,15 @@ function switchWorkspaceTab(tab) {
       videosTabInitialized = true;
     } else {
       void renderVideosPanel(currentProjectId);
+    }
+  }
+
+  if (tab === "timeline" && currentProjectId) {
+    if (!timelineTabInitialized) {
+      initTimelineTab(currentProjectId);
+      timelineTabInitialized = true;
+    } else {
+      void renderTimelinePanel(currentProjectId);
     }
   }
 }
@@ -306,7 +322,7 @@ function renderProjectTabs(id) {
     <button type="button" class="tab active" data-tab="create">Create Ad</button>
     <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab" data-tab="videos">Videos</button>
-    <button type="button" class="tab disabled" title="Fase 5">Timeline</button>
+    <button type="button" class="tab" data-tab="timeline">Timeline</button>
     <button type="button" class="tab disabled" title="Fase 7">Export</button>
     <span class="tab-meta">${jobs} jobs · ${project?.scenes?.length || 0} cenas · ${videosReady} clips</span>`;
 
@@ -448,6 +464,9 @@ window.addEventListener("ecoom:job-complete", async (e) => {
     if (activeWorkspaceTab === "videos") {
       void renderVideosPanel(currentProjectId);
     }
+    if (activeWorkspaceTab === "timeline") {
+      void renderTimelinePanel(currentProjectId);
+    }
   }
 });
 
@@ -455,4 +474,5 @@ window.addEventListener("beforeunload", () => {
   destroyCreateAd();
   destroyImagesTab();
   destroyVideosTab();
+  destroyTimelineTab();
 });

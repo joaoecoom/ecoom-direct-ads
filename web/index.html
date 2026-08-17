@@ -230,6 +230,34 @@
             <div id="videos-error" class="card error hidden"></div>
             <div id="scene-videos-grid" class="scene-images-grid"></div>
           </div>
+
+          <div id="panel-timeline" class="workspace-panel hidden">
+            <div class="images-toolbar card">
+              <div>
+                <h2>Smart Timeline</h2>
+                <p id="timeline-status" class="muted">Preview dos clips · rebuild só ffmpeg.</p>
+              </div>
+              <div class="images-actions">
+                <button type="button" class="btn primary sm" id="btn-rebuild-final" disabled>
+                  Rebuild Final Video
+                </button>
+              </div>
+            </div>
+            <div id="timeline-error" class="card error hidden"></div>
+            <div class="timeline-shell card">
+              <div id="timeline-ruler" class="timeline-ruler"></div>
+              <div id="timeline-track" class="timeline-track"></div>
+            </div>
+            <div id="timeline-preview" class="timeline-preview card"></div>
+            <div id="timeline-export-wrap" class="card hidden">
+              <h3>Final MP4</h3>
+              <p id="timeline-export-meta" class="muted"></p>
+              <div class="video-wrap">
+                <video id="timeline-export-video" controls playsinline></video>
+              </div>
+              <a id="timeline-export-download" class="btn sm" download="ecoom-export.mp4" href="#">Download MP4</a>
+            </div>
+          </div>
         </section>
 
         <!-- LIBRARY -->

@@ -163,3 +163,21 @@ export async function animateSceneVideo(projectId, sceneId) {
   if (!res.ok) throw new Error(data.error || "Animate falhou");
   return data;
 }
+
+export async function fetchProjectTimeline(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/timeline`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Timeline indisponível");
+  }
+  return res.json();
+}
+
+export async function rebuildTimeline(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/timeline/rebuild`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Rebuild falhou");
+  return data;
+}

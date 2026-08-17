@@ -34,6 +34,7 @@ import {
   updateProject,
 } from "./project-store.js";
 import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
+import { buildTimelineView } from "./timeline.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -74,6 +75,7 @@ app.get("/api/config", (_req, res) => {
       projects: true,
       assets: true,
       videos: true,
+      timeline: true,
       maxSceneCount: Math.max(...AD_SCENE_COUNTS),
     },
   });
@@ -290,6 +292,32 @@ app.post("/api/projects/:id/scenes/:sceneId/video", async (req, res) => {
     type: "scene_video",
     sceneId: req.params.sceneId,
   });
+});
+
+app.get("/api/projects/:id/timeline", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  res.json(buildTimelineView(project));
+});
+
+app.post("/api/projects/:id/timeline/rebuild", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const view = buildTimelineView(project);
+  if (!view.allVideosReady) {
+    return res.status(400).json({ error: "Todos os clips devem estar prontos (Animate All)." });
+  }
+
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "rebuild",
+    request: { type: "rebuild", projectId: req.params.id },
+  });
+
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "rebuild" });
 });
 
 app.get("/api/jobs", async (_req, res) => {

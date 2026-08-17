@@ -36,6 +36,8 @@ function normalizeProject(raw) {
     assetIds: raw.assetIds || [],
     blueprintPath: raw.blueprintPath || null,
     blueprint: raw.blueprint || null,
+    latestExport: raw.latestExport || null,
+    timelineStatus: raw.timelineStatus || "pending",
   };
 }
 
@@ -90,10 +92,31 @@ export async function linkAssetToScene(projectId, sceneId, assetId) {
 }
 
 export async function linkVideoAssetToScene(projectId, sceneId, assetId) {
-  return updateProjectScene(projectId, sceneId, {
+  await updateProjectScene(projectId, sceneId, {
     videoAssetId: assetId,
     status: { video: "done" },
   });
+  return markTimelineNeedsRebuild(projectId);
+}
+
+export async function setProjectExport(projectId, { assetId, jobId, finalVideo }) {
+  return updateProject(projectId, {
+    timelineStatus: "ready",
+    latestExport: {
+      assetId,
+      jobId,
+      finalVideo,
+      rebuiltAt: new Date().toISOString(),
+    },
+  });
+}
+
+export async function markTimelineNeedsRebuild(projectId) {
+  const project = await getProject(projectId);
+  if (!project?.latestExport) {
+    return updateProject(projectId, { timelineStatus: "needs_rebuild" });
+  }
+  return updateProject(projectId, { timelineStatus: "needs_rebuild" });
 }
 
 export async function addProjectAssetId(projectId, assetId) {
