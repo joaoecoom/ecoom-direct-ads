@@ -8,33 +8,39 @@ const execFileAsync = promisify(execFile);
 
 const NORMALIZE_FPS = Number.parseInt(process.env.VIDEO_NORMALIZE_FPS || "30", 10);
 
-async function normalizeClipForConcat(inputPath, outputPath) {
+async function normalizeClipForConcat(inputPath, outputPath, { keepAudio = false } = {}) {
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await execFileAsync(
-    "ffmpeg",
-    [
-      "-y",
-      "-i",
-      path.resolve(inputPath),
-      "-vf",
-      `fps=${NORMALIZE_FPS},format=yuv420p,setsar=1`,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "fast",
-      "-crf",
-      "18",
-      "-movflags",
-      "+faststart",
-      "-an",
-      path.resolve(outputPath),
-    ],
-    { stdio: "pipe" },
-  );
+  const args = [
+    "-y",
+    "-i",
+    path.resolve(inputPath),
+    "-map",
+    "0:v:0",
+    "-vf",
+    `fps=${NORMALIZE_FPS},format=yuv420p,setsar=1`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "fast",
+    "-crf",
+    "18",
+    "-movflags",
+    "+faststart",
+  ];
+
+  if (keepAudio) {
+    args.push("-map", "0:a:0?", "-c:a", "aac", "-b:a", "192k");
+  } else {
+    args.push("-an");
+  }
+
+  args.push(path.resolve(outputPath));
+
+  await execFileAsync("ffmpeg", args, { stdio: "pipe" });
   return outputPath;
 }
 
-async function normalizeClipsForConcat(inputPaths, workDir, onProgress) {
+async function normalizeClipsForConcat(inputPaths, workDir, onProgress, { keepAudio = false } = {}) {
   const normalized = [];
   for (let i = 0; i < inputPaths.length; i++) {
     onProgress?.({
@@ -43,7 +49,7 @@ async function normalizeClipsForConcat(inputPaths, workDir, onProgress) {
       clipTotal: inputPaths.length,
     });
     const out = path.join(workDir, `norm-${i}-${path.basename(inputPaths[i])}`);
-    normalized.push(await normalizeClipForConcat(inputPaths[i], out));
+    normalized.push(await normalizeClipForConcat(inputPaths[i], out, { keepAudio }));
   }
   return normalized;
 }
@@ -157,10 +163,11 @@ export async function concatenateVideosWithCrossfade(
   console.log(`   Crossfade: ${d.toFixed(2)}s entre ${inputPaths.length} clips`);
 
   const workDir = path.join(path.dirname(outputPath), `xfade-${timestampSlug()}`);
+  const useAudio = keepAudio && (await allClipsHaveAudio(inputPaths));
   let pathsToJoin = inputPaths;
   try {
     onProgress?.({ message: `A normalizar ${inputPaths.length} clip(s)…`, clipIndex: 0, clipTotal: inputPaths.length });
-    pathsToJoin = await normalizeClipsForConcat(inputPaths, workDir, onProgress);
+    pathsToJoin = await normalizeClipsForConcat(inputPaths, workDir, onProgress, { keepAudio: useAudio });
     durations.length = 0;
     for (const p of pathsToJoin) {
       durations.push(await getVideoDuration(p));
@@ -174,7 +181,11 @@ export async function concatenateVideosWithCrossfade(
 
   const inputs = pathsToJoin.flatMap((p) => ["-i", path.resolve(p)]);
   const videoFilter = buildVideoCrossfadeFilter(pathsToJoin.length, durations, dFinal);
-  const useAudio = keepAudio && (await allClipsHaveAudio(inputPaths));
+
+  if (useAudio && !(await allClipsHaveAudio(pathsToJoin))) {
+    console.log("   ⚠️ Clips normalizados sem áudio — export só vídeo...\n");
+  }
+  const includeAudio = useAudio && (await allClipsHaveAudio(pathsToJoin));
 
   onProgress?.({ message: `FFmpeg crossfade (${pathsToJoin.length} clips)…` });
 
@@ -204,7 +215,7 @@ export async function concatenateVideosWithCrossfade(
     await execFileAsync("ffmpeg", args, { stdio: "pipe" });
   }
 
-  if (useAudio) {
+  if (includeAudio) {
     try {
       await runFfmpeg(
         `${videoFilter};${buildAudioCrossfadeFilter(pathsToJoin.length, dFinal)}`,
