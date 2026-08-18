@@ -415,6 +415,7 @@ async function runRebuildJob(job, onProgress) {
   if (!project) throw new Error("Projecto não encontrado");
 
   const { storyboard } = loadStoryboardForProject(project);
+  const adConfig = resolveAdConfig(project.settings || {});
   const scenes = [...(project.scenes || [])].sort((a, b) => a.order - b.order);
 
   if (!scenes.length) throw new Error("Sem cenas na timeline.");
@@ -438,8 +439,10 @@ async function runRebuildJob(job, onProgress) {
 
   const result = await rebuildTimelineVideo({
     clipPaths,
+    sceneIds: scenes.map((s) => s.id),
     outputPath: finalPath,
     storyboard,
+    adConfig,
     onProgress,
   });
 

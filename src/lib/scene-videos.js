@@ -6,11 +6,12 @@ import {
   stripDialogueFromMotionPrompt,
 } from "./image-prompts.js";
 import { generateVideoFromImage } from "./veo-client.js";
+import { isUgcStoryboard, shouldUseUgcFlow } from "./ugc-flow.js";
 
 export function buildSceneVeoPrompt(storyboard, scene, adConfig, motionPromptOverride) {
   const clipDuration =
     storyboard.durationSeconds || adConfig.clipDurationSeconds || 8;
-  const isUgc = storyboard.style === "ugc";
+  const isUgc = isUgcStoryboard(storyboard, adConfig);
   const ttsEngine = process.env.TTS_ENGINE || "auto";
   const veoAudioEnabled = process.env.VEO_GENERATE_AUDIO !== "false";
   const useVeoNativeAudio =
@@ -55,8 +56,8 @@ export async function animateSceneVideo({
     storyboard.durationSeconds || adConfig.clipDurationSeconds || 8;
   const aspectRatio = storyboard.aspectRatio || adConfig.aspectRatio;
   const resolution = storyboard.resolution || adConfig.resolution;
-  const isUgc = storyboard.style === "ugc";
-  const useFlow = isUgc && sceneTotal > 1 && lastFramePath;
+  const useFlow =
+    shouldUseUgcFlow(storyboard, adConfig, sceneTotal) && lastFramePath;
 
   const storyboardScene =
     storyboard.scenes?.[sceneIndex] ||
@@ -100,7 +101,7 @@ export async function animateAllSceneVideos({
   onProgress,
 }) {
   const sceneTotal = scenes.length;
-  const isUgc = storyboard.style === "ugc";
+  const isUgcFlow = shouldUseUgcFlow(storyboard, adConfig, sceneTotal);
   const clips = [];
 
   for (let i = 0; i < scenes.length; i++) {
@@ -117,7 +118,7 @@ export async function animateAllSceneVideos({
 
     const imagePath = await getImagePath(scene);
     let lastFramePath = null;
-    if (isUgc && i < scenes.length - 1) {
+    if (isUgcFlow && i < scenes.length - 1) {
       lastFramePath = await getImagePath(scenes[i + 1]);
     }
 

@@ -1,5 +1,6 @@
 import { getAsset, resolveAssetFile } from "./asset-store.js";
 import { estimateTimelineDuration } from "../src/lib/timeline-rebuild.js";
+import { resolveCrossfadeSeconds } from "../src/lib/ugc-flow.js";
 import { sceneNeedsFinalRebuild } from "./scene-deps.js";
 
 function sceneBlockStatus(scene) {
@@ -15,8 +16,7 @@ function sceneBlockStatus(scene) {
 export function buildTimelineView(project) {
   const scenes = [...(project.scenes || [])].sort((a, b) => a.order - b.order);
   const clipDuration = project.settings?.clipDurationSeconds || 8;
-  const isUgc = project.settings?.style === "ugc";
-  const crossfadeSeconds = isUgc && scenes.length > 1 ? 0.35 : 0;
+  const crossfadeSeconds = resolveCrossfadeSeconds(null, project.settings, scenes.length);
   const projectHasExport = Boolean(project.latestExport);
 
   const blocks = scenes.map((scene, index) => ({

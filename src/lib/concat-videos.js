@@ -51,15 +51,36 @@ async function allClipsHaveAudio(inputPaths) {
   return checks.every(Boolean);
 }
 
-function buildAudioCrossfadeFilter(inputCount, d) {
+function buildVideoCrossfadeFilter(inputCount, durations, d) {
   if (inputCount === 2) {
-    return `[0:a][1:a]acrossfade=d=${d}[aout]`;
+    return `[0:v][1:v]xfade=transition=fade:duration=${d}:offset=${(durations[0] - d).toFixed(3)}[vout]`;
   }
-  let audioFilter = `[0:a][1:a]acrossfade=d=${d}[a01]`;
+
+  let offset = durations[0] - d;
+  let filter = `[0:v][1:v]xfade=transition=fade:duration=${d}:offset=${offset.toFixed(3)}[v01]`;
+  for (let i = 2; i < inputCount; i++) {
+    const prev = i === 2 ? "v01" : `v0${i - 1}`;
+    const next = i === inputCount - 1 ? "vout" : `v0${i}`;
+    offset += durations[i - 1] - d;
+    filter += `;[${prev}][${i}:v]xfade=transition=fade:duration=${d}:offset=${offset.toFixed(3)}[${next}]`;
+  }
+  return filter;
+}
+
+function buildAudioCrossfadeFilter(inputCount, d) {
+  const normalized = Array.from({ length: inputCount }, (_, i) => {
+    return `[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`;
+  }).join(";");
+
+  if (inputCount === 2) {
+    return `${normalized};[a0][a1]acrossfade=d=${d}[aout]`;
+  }
+
+  let audioFilter = `${normalized};[a0][a1]acrossfade=d=${d}[a01]`;
   for (let i = 2; i < inputCount; i++) {
     const prev = i === 2 ? "a01" : `a0${i - 1}`;
     const next = i === inputCount - 1 ? "aout" : `a0${i}`;
-    audioFilter += `;[${prev}][${i}:a]acrossfade=d=${d}[${next}]`;
+    audioFilter += `;[${prev}][a${i}]acrossfade=d=${d}[${next}]`;
   }
   return audioFilter;
 }
@@ -91,51 +112,47 @@ export async function concatenateVideosWithCrossfade(
   console.log(`   Crossfade: ${d.toFixed(2)}s entre ${inputPaths.length} clips`);
 
   const inputs = inputPaths.flatMap((p) => ["-i", path.resolve(p)]);
+  const videoFilter = buildVideoCrossfadeFilter(inputPaths.length, durations, d);
+  const useAudio = keepAudio && (await allClipsHaveAudio(inputPaths));
 
-  let filter;
-  if (inputPaths.length === 2) {
-    filter = `[0:v][1:v]xfade=transition=fade:duration=${d}:offset=${(durations[0] - d).toFixed(3)}[vout]`;
-  } else {
-    let offset = durations[0] - d;
-    filter = `[0:v][1:v]xfade=transition=fade:duration=${d}:offset=${offset.toFixed(3)}[v01]`;
-    for (let i = 2; i < inputPaths.length; i++) {
-      const prev = i === 2 ? "v01" : `v0${i - 1}`;
-      const next = i === inputPaths.length - 1 ? "vout" : `v0${i}`;
-      offset += durations[i - 1] - d;
-      filter += `;[${prev}][${i}:v]xfade=transition=fade:duration=${d}:offset=${offset.toFixed(3)}[${next}]`;
+  async function runFfmpeg(filterComplex, includeAudio) {
+    const args = [
+      "-y",
+      ...inputs,
+      "-filter_complex",
+      filterComplex,
+      "-map",
+      "[vout]",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
+    ];
+
+    if (includeAudio) {
+      args.push("-map", "[aout]", "-c:a", "aac", "-b:a", "192k");
+    } else {
+      args.push("-an");
+    }
+
+    args.push(path.resolve(outputPath));
+    await execFileAsync("ffmpeg", args, { stdio: "pipe" });
+  }
+
+  if (useAudio) {
+    try {
+      await runFfmpeg(`${videoFilter};${buildAudioCrossfadeFilter(inputPaths.length, d)}`, true);
+      return outputPath;
+    } catch (err) {
+      console.log(
+        `   ⚠️ Crossfade com áudio falhou (${err.message}) — a usar só vídeo...\n`,
+      );
     }
   }
 
-  const useAudio = keepAudio && (await allClipsHaveAudio(inputPaths));
-  let filterComplex = filter;
-  if (useAudio) {
-    filterComplex = `${filter};${buildAudioCrossfadeFilter(inputPaths.length, d)}`;
-  }
-
-  const args = [
-    "-y",
-    ...inputs,
-    "-filter_complex",
-    filterComplex,
-    "-map",
-    "[vout]",
-    "-c:v",
-    "libx264",
-    "-pix_fmt",
-    "yuv420p",
-    "-movflags",
-    "+faststart",
-  ];
-
-  if (useAudio) {
-    args.push("-map", "[aout]", "-c:a", "aac", "-b:a", "192k");
-  } else {
-    args.push("-an");
-  }
-
-  args.push(path.resolve(outputPath));
-
-  await execFileAsync("ffmpeg", args, { stdio: "pipe" });
+  await runFfmpeg(videoFilter, false);
   return outputPath;
 }
 
@@ -182,8 +199,19 @@ export async function concatenateVideos(inputPaths, outputPath, options = {}) {
     await execFileAsync(
       "ffmpeg",
       [
-        "-y", "-f", "concat", "-safe", "0", "-i", listFile,
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        listFile,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
         outputPath,
       ],
       { stdio: "pipe" },
