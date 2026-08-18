@@ -216,6 +216,15 @@ export async function activateSceneVersion(projectId, sceneId, type, assetId) {
   return data;
 }
 
+export async function fetchProjectExports(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/exports`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Exports indisponíveis");
+  }
+  return res.json();
+}
+
 export async function regenerateSceneVideo(projectId, sceneId, body = {}) {
   const res = await fetch(
     `${API_URL}/api/projects/${projectId}/scenes/${sceneId}/video`,

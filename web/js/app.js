@@ -12,6 +12,7 @@ import { destroyCreateAd, initCreateAd, refreshCreateAdForm } from "./create-ad.
 import { destroyImagesTab, initImagesTab, renderImagesPanel } from "./images.js";
 import { destroyVideosTab, initVideosTab, renderVideosPanel } from "./videos.js";
 import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./timeline.js";
+import { destroyExportTab, initExportTab, renderExportPanel } from "./export.js";
 import { assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
 
 const views = {
@@ -39,6 +40,8 @@ let videosTabInitialized = false;
 let videosTabProjectId = null;
 let timelineTabInitialized = false;
 let timelineTabProjectId = null;
+let exportTabInitialized = false;
+let exportTabProjectId = null;
 let activeWorkspaceTab = "create";
 
 function parseRoute() {
@@ -173,6 +176,10 @@ function renderProjectWorkspace(id) {
     timelineTabInitialized = false;
     timelineTabProjectId = id;
   }
+  if (exportTabProjectId !== id) {
+    exportTabInitialized = false;
+    exportTabProjectId = id;
+  }
 
   if (!createAdInitialized) {
     initCreateAd(id);
@@ -219,6 +226,15 @@ function switchWorkspaceTab(tab) {
       timelineTabInitialized = true;
     } else {
       void renderTimelinePanel(currentProjectId);
+    }
+  }
+
+  if (tab === "export" && currentProjectId) {
+    if (!exportTabInitialized) {
+      initExportTab(currentProjectId);
+      exportTabInitialized = true;
+    } else {
+      void renderExportPanel(currentProjectId);
     }
   }
 }
@@ -318,12 +334,14 @@ function renderProjectTabs(id) {
 
   const videosReady = (project?.scenes || []).filter((s) => s.videoAssetId).length;
 
+  const exportReady = project?.latestExport?.assetId ? 1 : 0;
+
   tabsEl.innerHTML = `
     <button type="button" class="tab active" data-tab="create">Create Ad</button>
     <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab" data-tab="videos">Videos</button>
     <button type="button" class="tab" data-tab="timeline">Timeline</button>
-    <button type="button" class="tab disabled" title="Fase 7">Export</button>
+    <button type="button" class="tab" data-tab="export">Export${exportReady ? " ✓" : ""}</button>
     <span class="tab-meta">${jobs} jobs · ${project?.scenes?.length || 0} cenas · ${videosReady} clips</span>`;
 
   tabsEl.querySelectorAll(".tab[data-tab]:not(.disabled)").forEach((btn) => {
@@ -453,6 +471,11 @@ async function boot() {
 boot();
 setInterval(checkApiStatus, 60000);
 
+window.addEventListener("ecoom:switch-tab", (e) => {
+  const tab = e.detail?.tab;
+  if (tab && currentProjectId) switchWorkspaceTab(tab);
+});
+
 window.addEventListener("ecoom:job-complete", async (e) => {
   await initProjects();
   if (currentProjectId && e.detail?.projectId === currentProjectId) {
@@ -467,6 +490,9 @@ window.addEventListener("ecoom:job-complete", async (e) => {
     if (activeWorkspaceTab === "timeline") {
       void renderTimelinePanel(currentProjectId);
     }
+    if (activeWorkspaceTab === "export") {
+      void renderExportPanel(currentProjectId);
+    }
   }
 });
 
@@ -475,4 +501,5 @@ window.addEventListener("beforeunload", () => {
   destroyImagesTab();
   destroyVideosTab();
   destroyTimelineTab();
+  destroyExportTab();
 });

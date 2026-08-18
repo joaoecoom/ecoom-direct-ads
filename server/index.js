@@ -38,6 +38,7 @@ import {
 } from "./project-store.js";
 import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
 import { buildTimelineView } from "./timeline.js";
+import { buildExportView } from "./exports.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -80,6 +81,7 @@ app.get("/api/config", (_req, res) => {
       videos: true,
       timeline: true,
       sceneEditor: true,
+      export: true,
       maxSceneCount: Math.max(...AD_SCENE_COUNTS),
     },
   });
@@ -382,6 +384,13 @@ app.get("/api/projects/:id/timeline", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
   res.json(buildTimelineView(project));
+});
+
+app.get("/api/projects/:id/exports", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  const assets = await listAssetsByProject(req.params.id);
+  res.json(await buildExportView(project, assets));
 });
 
 app.post("/api/projects/:id/timeline/rebuild", async (req, res) => {

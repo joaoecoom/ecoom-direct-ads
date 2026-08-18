@@ -107,7 +107,6 @@ export async function renderTimelinePanel(projectId) {
   const track = document.getElementById("timeline-track");
   const ruler = document.getElementById("timeline-ruler");
   const preview = document.getElementById("timeline-preview");
-  const exportWrap = document.getElementById("timeline-export-wrap");
   if (!track) return;
 
   let timeline;
@@ -142,7 +141,6 @@ export async function renderTimelinePanel(projectId) {
     track.innerHTML = `<div class="empty-state card"><p class="muted">Sem cenas. Gera blueprint + imagens + vídeos primeiro.</p></div>`;
     ruler.innerHTML = "";
     preview.innerHTML = "";
-    exportWrap?.classList.add("hidden");
     return;
   }
 
@@ -174,19 +172,6 @@ export async function renderTimelinePanel(projectId) {
   }
 
   await renderSceneEditor(projectId, timeline, preview);
-
-  if (timeline.latestExport?.assetId) {
-    exportWrap?.classList.remove("hidden");
-    const url = assetFileUrl(timeline.latestExport.assetId);
-    const video = document.getElementById("timeline-export-video");
-    if (video) video.src = `${url}?t=${Date.now()}`;
-    const dl = document.getElementById("timeline-export-download");
-    if (dl) dl.href = url;
-    document.getElementById("timeline-export-meta").textContent =
-      `Export · ${timeline.latestExport.rebuiltAt ? new Date(timeline.latestExport.rebuiltAt).toLocaleString("pt-PT") : ""}`;
-  } else {
-    exportWrap?.classList.add("hidden");
-  }
 }
 
 function statusIcon(value, outdated = false) {

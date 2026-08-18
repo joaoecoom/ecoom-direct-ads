@@ -249,13 +249,54 @@
               <div id="timeline-track" class="timeline-track"></div>
             </div>
             <div id="timeline-preview" class="timeline-preview card"></div>
-            <div id="timeline-export-wrap" class="card hidden">
-              <h3>Final MP4</h3>
-              <p id="timeline-export-meta" class="muted"></p>
-              <div class="video-wrap">
-                <video id="timeline-export-video" controls playsinline></video>
+          </div>
+
+          <div id="panel-export" class="workspace-panel hidden">
+            <div class="images-toolbar card">
+              <div>
+                <h2>Export</h2>
+                <p id="export-status" class="muted">MP4 final, copy e histórico de exports.</p>
               </div>
-              <a id="timeline-export-download" class="btn sm" download="ecoom-export.mp4" href="#">Download MP4</a>
+              <div class="images-actions">
+                <button type="button" class="btn sm" id="btn-goto-timeline">Timeline →</button>
+                <button type="button" class="btn primary sm" id="btn-export-rebuild" disabled>
+                  Rebuild Final Video
+                </button>
+              </div>
+            </div>
+            <div id="export-error" class="card error hidden"></div>
+            <div id="export-status-banner" class="export-status-banner card hidden"></div>
+            <div id="export-main" class="export-main hidden">
+              <div class="export-preview card">
+                <div class="export-preview-head">
+                  <div>
+                    <h3>Final MP4</h3>
+                    <p id="export-meta" class="muted"></p>
+                  </div>
+                  <a id="export-download" class="btn primary sm" download="ecoom-export.mp4" href="#">Download MP4</a>
+                </div>
+                <div class="video-wrap">
+                  <video id="export-video" controls playsinline></video>
+                </div>
+              </div>
+              <div class="export-details-grid">
+                <div id="export-specs" class="card export-specs"></div>
+                <div id="export-copy-wrap" class="card export-copy-wrap hidden">
+                  <div class="export-copy-head">
+                    <h3>Ad Copy</h3>
+                    <button type="button" class="btn sm" id="btn-copy-export">Copiar</button>
+                  </div>
+                  <pre id="export-copy-block" class="export-copy-block"></pre>
+                </div>
+              </div>
+            </div>
+            <div id="export-empty" class="card empty-state hidden">
+              <h3>Sem export ainda</h3>
+              <p class="muted">Completa Images → Videos → Timeline e faz Rebuild Final Video.</p>
+            </div>
+            <div id="export-history-wrap" class="card hidden">
+              <h3>Export history</h3>
+              <div id="export-history" class="export-history"></div>
             </div>
           </div>
         </section>
