@@ -24,14 +24,17 @@ import {
   resolveAssetFile,
 } from "./asset-store.js";
 import {
+  activateSceneAssetVersion,
   addProjectAssetId,
   createProject,
   deleteProject,
   duplicateProject,
   getProject,
+  getProjectScene,
   linkAssetToScene,
   listProjects,
   updateProject,
+  updateProjectScene,
 } from "./project-store.js";
 import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
 import { buildTimelineView } from "./timeline.js";
@@ -76,6 +79,7 @@ app.get("/api/config", (_req, res) => {
       assets: true,
       videos: true,
       timeline: true,
+      sceneEditor: true,
       maxSceneCount: Math.max(...AD_SCENE_COUNTS),
     },
   });
@@ -282,6 +286,7 @@ app.post("/api/projects/:id/scenes/:sceneId/video", async (req, res) => {
       type: "scene_video",
       projectId: req.params.id,
       sceneId: req.params.sceneId,
+      motionPrompt: req.body?.motionPrompt || null,
     },
   });
 
@@ -292,6 +297,85 @@ app.post("/api/projects/:id/scenes/:sceneId/video", async (req, res) => {
     type: "scene_video",
     sceneId: req.params.sceneId,
   });
+});
+
+app.get("/api/projects/:id/scenes/:sceneId", async (req, res) => {
+  const data = await getProjectScene(req.params.id, req.params.sceneId);
+  if (!data) return res.status(404).json({ error: "Cena não encontrada" });
+
+  const { project, scene } = data;
+  const assets = await listAssetsByProject(req.params.id);
+  const assetById = Object.fromEntries(assets.map((a) => [a.id, a]));
+
+  const mapVersions = (ids, activeId) =>
+    (ids || []).map((assetId, index) => {
+      const asset = assetById[assetId];
+      return {
+        assetId,
+        label: `V${index + 1}`,
+        active: assetId === activeId,
+        prompt: asset?.prompt || "",
+        source: asset?.source || "",
+        createdAt: asset?.createdAt || null,
+      };
+    });
+
+  res.json({
+    scene: {
+      id: scene.id,
+      order: scene.order,
+      role: scene.role,
+      imagePrompt: scene.imagePrompt,
+      motionPrompt: scene.motionPrompt,
+      voiceoverLine: scene.voiceoverLine,
+      imageAssetId: scene.imageAssetId,
+      videoAssetId: scene.videoAssetId,
+      status: scene.status || {},
+    },
+    versions: {
+      image: mapVersions(scene.imageVersions, scene.imageAssetId),
+      video: mapVersions(scene.videoVersions, scene.videoAssetId),
+    },
+    timelineStatus: buildTimelineView(project).timelineStatus,
+  });
+});
+
+app.patch("/api/projects/:id/scenes/:sceneId", async (req, res) => {
+  try {
+    const patch = {};
+    if (req.body?.motionPrompt !== undefined) {
+      patch.motionPrompt = String(req.body.motionPrompt || "").trim();
+    }
+    if (!Object.keys(patch).length) {
+      return res.status(400).json({ error: "Nada para actualizar" });
+    }
+    const project = await updateProjectScene(req.params.id, req.params.sceneId, patch);
+    const scene = project.scenes.find((s) => s.id === req.params.sceneId);
+    res.json({ scene, timelineStatus: buildTimelineView(project).timelineStatus });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post("/api/projects/:id/scenes/:sceneId/versions/activate", async (req, res) => {
+  try {
+    const { type, assetId } = req.body || {};
+    if (!["image", "video"].includes(type)) {
+      return res.status(400).json({ error: "type deve ser 'image' ou 'video'" });
+    }
+    if (!assetId) return res.status(400).json({ error: "assetId obrigatório" });
+
+    const project = await activateSceneAssetVersion(
+      req.params.id,
+      req.params.sceneId,
+      type,
+      assetId,
+    );
+    const scene = project.scenes.find((s) => s.id === req.params.sceneId);
+    res.json({ scene, timelineStatus: buildTimelineView(project).timelineStatus });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.get("/api/projects/:id/timeline", async (req, res) => {

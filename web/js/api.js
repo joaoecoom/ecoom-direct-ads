@@ -181,3 +181,51 @@ export async function rebuildTimeline(projectId) {
   if (!res.ok) throw new Error(data.error || "Rebuild falhou");
   return data;
 }
+
+export async function fetchProjectScene(projectId, sceneId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/scenes/${sceneId}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Cena indisponível");
+  }
+  return res.json();
+}
+
+export async function patchProjectScene(projectId, sceneId, patch) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/scenes/${sceneId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao actualizar cena");
+  return data;
+}
+
+export async function activateSceneVersion(projectId, sceneId, type, assetId) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/scenes/${sceneId}/versions/activate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, assetId }),
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao activar versão");
+  return data;
+}
+
+export async function regenerateSceneVideo(projectId, sceneId, body = {}) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/scenes/${sceneId}/video`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Regeneração de vídeo falhou");
+  return data;
+}

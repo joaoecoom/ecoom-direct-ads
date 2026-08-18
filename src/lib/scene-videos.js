@@ -7,7 +7,7 @@ import {
 } from "./image-prompts.js";
 import { generateVideoFromImage } from "./veo-client.js";
 
-export function buildSceneVeoPrompt(storyboard, scene, adConfig) {
+export function buildSceneVeoPrompt(storyboard, scene, adConfig, motionPromptOverride) {
   const clipDuration =
     storyboard.durationSeconds || adConfig.clipDurationSeconds || 8;
   const isUgc = storyboard.style === "ugc";
@@ -19,7 +19,8 @@ export function buildSceneVeoPrompt(storyboard, scene, adConfig) {
     (adConfig.languageVariant !== "pt-PT" || ttsEngine === "veo");
 
   const motionBase = stripDialogueFromMotionPrompt(
-    scene.motionPrompt ||
+    motionPromptOverride ||
+      scene.motionPrompt ||
       buildFlowMotionPrompt(clipDuration, scene.visualBeat),
   );
 
@@ -48,6 +49,7 @@ export async function animateSceneVideo({
   lastFramePath,
   outputDir,
   runLabel,
+  motionPromptOverride,
 }) {
   const clipDuration =
     storyboard.durationSeconds || adConfig.clipDurationSeconds || 8;
@@ -61,7 +63,12 @@ export async function animateSceneVideo({
     storyboard.scenes?.find((s, i) => (s.id || `parte-${i + 1}`) === scene.id) ||
     scene;
 
-  const prompt = buildSceneVeoPrompt(storyboard, storyboardScene, adConfig);
+  const prompt = buildSceneVeoPrompt(
+    storyboard,
+    storyboardScene,
+    adConfig,
+    motionPromptOverride,
+  );
   const id = scene.id || `parte-${sceneIndex + 1}`;
 
   await ensureOutputDir(outputDir);

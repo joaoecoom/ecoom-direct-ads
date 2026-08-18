@@ -3,6 +3,12 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
+import {
+  statusAfterImageChange,
+  statusAfterMotionPromptChange,
+  statusAfterVideoChange,
+} from "./scene-deps.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = path.join(__dirname, "..", "data", "projects");
 
@@ -27,16 +33,17 @@ function projectPath(id) {
 }
 
 function normalizeProject(raw) {
+  const latestExport = raw.latestExport || null;
   return {
     ...raw,
     settings: { ...DEFAULT_PROJECT_SETTINGS, ...raw.settings },
     jobIds: raw.jobIds || [],
     creatives: raw.creatives || [],
-    scenes: raw.scenes || [],
+    scenes: (raw.scenes || []).map((s) => normalizeScene(s, Boolean(latestExport))),
     assetIds: raw.assetIds || [],
     blueprintPath: raw.blueprintPath || null,
     blueprint: raw.blueprint || null,
-    latestExport: raw.latestExport || null,
+    latestExport,
     timelineStatus: raw.timelineStatus || "pending",
   };
 }
@@ -53,8 +60,38 @@ export function storyboardToScenes(storyboard) {
     onScreenText: s.onScreenText || "",
     imageAssetId: null,
     videoAssetId: null,
-    status: { prompt: "done", image: "pending", video: "pending" },
+    imageVersions: [],
+    videoVersions: [],
+    status: { prompt: "done", image: "pending", video: "pending", final: "pending" },
   }));
+}
+
+function normalizeScene(scene, projectHasExport = false) {
+  const imageVersions =
+    scene.imageVersions?.length
+      ? scene.imageVersions
+      : scene.imageAssetId
+        ? [scene.imageAssetId]
+        : [];
+  const videoVersions =
+    scene.videoVersions?.length
+      ? scene.videoVersions
+      : scene.videoAssetId
+        ? [scene.videoAssetId]
+        : [];
+
+  return {
+    ...scene,
+    imageVersions,
+    videoVersions,
+    status: {
+      prompt: "done",
+      image: "pending",
+      video: "pending",
+      final: projectHasExport ? "pending" : "pending",
+      ...scene.status,
+    },
+  };
 }
 
 export async function applyBlueprint(projectId, { storyboardPath, storyboard }) {
@@ -72,36 +109,118 @@ export async function applyBlueprint(projectId, { storyboardPath, storyboard }) 
 export async function updateProjectScene(projectId, sceneId, patch) {
   const project = await getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} não encontrado`);
-  const scenes = project.scenes.map((s) =>
-    s.id === sceneId
-      ? {
-          ...s,
-          ...patch,
-          status: patch.status ? { ...s.status, ...patch.status } : s.status,
-        }
-      : s,
-  );
-  return updateProject(projectId, { scenes });
-}
+  const scenes = project.scenes.map((s) => {
+    if (s.id !== sceneId) return s;
 
-export async function linkAssetToScene(projectId, sceneId, assetId) {
-  return updateProjectScene(projectId, sceneId, {
-    imageAssetId: assetId,
-    status: { image: "done" },
+    let status = s.status;
+    if (patch.motionPrompt !== undefined && patch.motionPrompt !== s.motionPrompt) {
+      status = statusAfterMotionPromptChange(s, Boolean(project.latestExport));
+    }
+    if (patch.status) {
+      status = { ...status, ...patch.status };
+    }
+
+    const { status: _ignored, ...restPatch } = patch;
+    return { ...s, ...restPatch, status };
   });
+
+  const updated = await updateProject(projectId, { scenes });
+  if (patch.motionPrompt !== undefined) {
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (scene && patch.motionPrompt !== scene.motionPrompt) {
+      await markTimelineNeedsRebuild(projectId);
+    }
+  }
+  return updated;
 }
 
-export async function linkVideoAssetToScene(projectId, sceneId, assetId) {
+export async function registerSceneImageAsset(projectId, sceneId, assetId) {
+  const project = await getProject(projectId);
+  if (!project) throw new Error(`Project ${projectId} não encontrado`);
+  const scene = project.scenes.find((s) => s.id === sceneId);
+  if (!scene) throw new Error(`Cena ${sceneId} não encontrada`);
+
+  const imageChanged = scene.imageAssetId && scene.imageAssetId !== assetId;
+  const imageVersions = [...new Set([...(scene.imageVersions || []), assetId])];
+
+  await updateProjectScene(projectId, sceneId, {
+    imageAssetId: assetId,
+    imageVersions,
+    status: imageChanged
+      ? statusAfterImageChange(scene, Boolean(project.latestExport))
+      : { ...scene.status, image: "done" },
+  });
+
+  if (imageChanged && (scene.videoAssetId || project.latestExport)) {
+    await markTimelineNeedsRebuild(projectId);
+  }
+  return getProject(projectId);
+}
+
+export async function registerSceneVideoAsset(projectId, sceneId, assetId) {
+  const project = await getProject(projectId);
+  if (!project) throw new Error(`Project ${projectId} não encontrado`);
+  const scene = project.scenes.find((s) => s.id === sceneId);
+  if (!scene) throw new Error(`Cena ${sceneId} não encontrada`);
+
+  const videoVersions = [...new Set([...(scene.videoVersions || []), assetId])];
+
   await updateProjectScene(projectId, sceneId, {
     videoAssetId: assetId,
-    status: { video: "done" },
+    videoVersions,
+    status: statusAfterVideoChange(scene, Boolean(project.latestExport)),
   });
-  return markTimelineNeedsRebuild(projectId);
+
+  await markTimelineNeedsRebuild(projectId);
+  return getProject(projectId);
+}
+
+export async function activateSceneAssetVersion(projectId, sceneId, type, assetId) {
+  const project = await getProject(projectId);
+  const scene = project.scenes.find((s) => s.id === sceneId);
+  if (!scene) throw new Error(`Cena ${sceneId} não encontrada`);
+
+  const versions = type === "image" ? scene.imageVersions : scene.videoVersions;
+  if (!versions?.includes(assetId)) {
+    throw new Error("Versão não encontrada nesta cena.");
+  }
+
+  if (type === "image") return registerSceneImageAsset(projectId, sceneId, assetId);
+  return registerSceneVideoAsset(projectId, sceneId, assetId);
+}
+
+export async function getProjectScene(projectId, sceneId) {
+  const project = await getProject(projectId);
+  const scene = project?.scenes?.find((s) => s.id === sceneId);
+  if (!scene) return null;
+  return { project, scene };
+}
+
+/** @deprecated use registerSceneImageAsset */
+export async function linkAssetToScene(projectId, sceneId, assetId) {
+  return registerSceneImageAsset(projectId, sceneId, assetId);
+}
+
+/** @deprecated use registerSceneVideoAsset */
+export async function linkVideoAssetToScene(projectId, sceneId, assetId) {
+  return registerSceneVideoAsset(projectId, sceneId, assetId);
 }
 
 export async function setProjectExport(projectId, { assetId, jobId, finalVideo }) {
+  const project = await getProject(projectId);
+  const scenes = (project?.scenes || []).map((s) => ({
+    ...s,
+    status: {
+      ...s.status,
+      final: "done",
+      video: s.videoAssetId ? "done" : s.status?.video || "pending",
+      image: s.imageAssetId ? "done" : s.status?.image || "pending",
+    },
+  }));
+
   return updateProject(projectId, {
     timelineStatus: "ready",
+    scenes,
     latestExport: {
       assetId,
       jobId,

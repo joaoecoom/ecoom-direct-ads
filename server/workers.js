@@ -300,7 +300,7 @@ async function runVideosJob(job, onProgress) {
 }
 
 async function runSceneVideoJob(job, onProgress) {
-  const { projectId, sceneId } = job.request;
+  const { projectId, sceneId, motionPrompt: motionPromptOverride } = job.request;
   const project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
 
@@ -349,6 +349,7 @@ async function runSceneVideoJob(job, onProgress) {
     lastFramePath,
     outputDir,
     runLabel: `veo-scene/${sceneId}`,
+    motionPromptOverride: motionPromptOverride || scene.motionPrompt || null,
   });
 
   const asset = await registerVideoAsset({
