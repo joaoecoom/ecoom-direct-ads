@@ -16,6 +16,7 @@ import { isLipSyncAvailable, lipSyncSceneClips } from "./lib/lipsync.js";
 import { generateStoryboard, generateStoryboardFromCopy } from "./lib/storyboard.js";
 import { generateAdCopy } from "./lib/copy-writer.js";
 import { runSequence } from "./generate-sequence.js";
+import { resolveCrossfadeSeconds } from "./lib/ugc-flow.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -147,9 +148,10 @@ export async function runAdGeneration({
     const id = scene.id || `parte-${i + 1}`;
     const imageFile = generatedImages[i]?.path || path.join(assetsRunDir, `${id}.png`);
 
+    const bridging = isUgc && i < storyboard.scenes.length - 1;
     const motionBase = stripDialogueFromMotionPrompt(
       scene.motionPrompt ||
-        buildFlowMotionPrompt(clipDuration, scene.visualBeat),
+        buildFlowMotionPrompt(clipDuration, scene.visualBeat, { bridging }),
     );
 
     const veoPrompt = useVeoNativeAudio
@@ -184,13 +186,16 @@ export async function runAdGeneration({
   await progress("video", `A animar ${sceneTotal} cena(s) com Veo...`, { sceneTotal });
 
   const useFlow = isUgc && sceneTotal > 1;
+  const crossfadeSeconds = resolveCrossfadeSeconds(storyboard, adConfig, sceneTotal, {
+    veoFlow: useFlow,
+  });
 
   const manifest = await runSequence({
     aspectRatio,
     durationSeconds: clipDuration,
     resolution,
     flow: useFlow,
-    crossfadeSeconds: useFlow ? 0.35 : 0,
+    crossfadeSeconds,
     keepAudio: useVeoNativeAudio,
     outputFileName: path.basename(silentPath),
     storyboard,
@@ -241,7 +246,7 @@ export async function runAdGeneration({
 
     finalVideo = path.join(config.outputDir, `${slug}-${runId}.mp4`);
     await concatenateVideos(voicedClips, finalVideo, {
-      crossfadeSeconds: useFlow ? 0.35 : 0,
+      crossfadeSeconds,
       keepAudio: true,
     });
   }

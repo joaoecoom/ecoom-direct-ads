@@ -1,6 +1,7 @@
-import { assetFileUrl, fetchProjectAssets, uploadAsset } from "./api.js";
+import { assetFileUrl, fetchProjectAssets, generateAssetVariations, uploadAsset } from "./api.js";
 import { getProject, initProjects } from "./projects.js";
 import { getStartingPoint } from "./starting-point.js";
+import { waitForJob } from "./job-activity.js";
 
 let activeProjectId = null;
 let selectedAssetId = null;
@@ -209,7 +210,7 @@ function renderAssetActions(project, assetId) {
       <button type="button" class="btn sm" data-asset-action="build-ad">Build Ad</button>
       <button type="button" class="btn primary sm" data-asset-action="create-from">Create from this</button>
     </div>
-    <p class="muted asset-actions-note">Variações, análise de vídeo e face swap — próximas fases. Build Ad abre o fluxo Create.</p>`;
+    <p class="muted asset-actions-note">Variações UGC activas. Vídeo analyze / face swap — fase seguinte.</p>`;
 }
 
 async function handleAssetAction(action) {
@@ -221,10 +222,37 @@ async function handleAssetAction(action) {
       showAssetsNotice("Referência/personagem — usa tab Images → + Referência (já ligado ao pipeline).");
       window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "images" } }));
       break;
-    case "variations":
-      showAssetsNotice("Gerar variações — em breve. Por agora: Images → Generate All Images com referências.");
-      window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "images" } }));
+    case "variations": {
+      const countStr = window.prompt("Quantas variações? (1–12)", "5");
+      const count = Math.min(12, Math.max(1, Number.parseInt(countStr || "5", 10) || 5));
+      const prompt = window.prompt(
+        "Prompt para as variações (opcional):",
+        "Same person in different natural UGC environments and situations, preserve identity",
+      );
+      setAssetsStatus(`A gerar ${count} variações...`);
+      try {
+        const data = await generateAssetVariations(activeProjectId, selectedAssetId, {
+          count,
+          prompt: prompt || "",
+        });
+        await waitForJob(data.jobId, {
+          jobType: "variations",
+          onUpdate: (job) => {
+            const scene =
+              job.progress?.sceneIndex && job.progress?.sceneTotal
+                ? ` (${job.progress.sceneIndex}/${job.progress.sceneTotal})`
+                : "";
+            setAssetsStatus(`Variações${scene}: ${job.progress?.message || job.status}`);
+          },
+        });
+        await initProjects();
+        await renderAssetsHub(activeProjectId);
+        setAssetsStatus(`${count} variações concluídas — selecciona e anima ou Build Ad.`);
+      } catch (err) {
+        showAssetsNotice(err.message);
+      }
       break;
+    }
     case "animate":
       window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "videos" } }));
       break;

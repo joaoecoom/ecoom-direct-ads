@@ -15,11 +15,23 @@ export function isUgcStoryboard(storyboard, settings = {}) {
   return resolveStoryboardStyle(storyboard, settings) === "ugc";
 }
 
-export function resolveCrossfadeSeconds(storyboard, settings = {}, clipCount) {
+export function resolveCrossfadeSeconds(storyboard, settings = {}, clipCount, options = {}) {
   if (!clipCount || clipCount <= 1) return 0;
-  if (!isUgcStoryboard(storyboard, settings)) return 0;
-  const env = Number.parseFloat(process.env.VIDEO_CROSSFADE_SECONDS || "0.35");
-  return Number.isFinite(env) && env > 0 ? env : 0.35;
+
+  const envRaw = process.env.VIDEO_CROSSFADE_SECONDS || "0.6";
+  const env = Number.parseFloat(envRaw);
+  const base = Number.isFinite(env) && env > 0 ? env : 0.6;
+
+  if (!isUgcStoryboard(storyboard, settings)) {
+    return Math.min(base, 0.45);
+  }
+
+  // Veo flow (lastFrame): clips já morfam para a cena seguinte — blend mais curto evita "double exposure"
+  if (options.veoFlow) {
+    return Math.max(0.28, Math.min(base, 0.42));
+  }
+
+  return base;
 }
 
 export function shouldUseUgcFlow(storyboard, settings = {}, sceneTotal) {

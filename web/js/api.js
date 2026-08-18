@@ -162,6 +162,20 @@ export async function uploadAsset(projectId, payload) {
   return data;
 }
 
+export async function generateAssetVariations(projectId, assetId, body = {}) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/assets/${assetId}/variations`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Variações falharam");
+  return data;
+}
+
 export async function generateBlueprint(projectId, body = {}) {
   const res = await fetch(`${API_URL}/api/projects/${projectId}/blueprint`, {
     method: "POST",

@@ -21,7 +21,7 @@ export async function runSequence(spec) {
   const onProgress = spec.onProgress;
   const crossfadeSeconds =
     spec.crossfadeSeconds ??
-    Number.parseFloat(process.env.VIDEO_CROSSFADE_SECONDS || "0.35");
+    Number.parseFloat(process.env.VIDEO_CROSSFADE_SECONDS || "0.6");
   const keepAudio = spec.keepAudio === true;
 
   if (!Array.isArray(scenes) || scenes.length === 0) {

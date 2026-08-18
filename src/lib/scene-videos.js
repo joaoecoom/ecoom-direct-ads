@@ -8,7 +8,13 @@ import {
 import { generateVideoFromImage } from "./veo-client.js";
 import { isUgcStoryboard, shouldUseUgcFlow } from "./ugc-flow.js";
 
-export function buildSceneVeoPrompt(storyboard, scene, adConfig, motionPromptOverride) {
+export function buildSceneVeoPrompt(
+  storyboard,
+  scene,
+  adConfig,
+  motionPromptOverride,
+  { bridging = false } = {},
+) {
   const clipDuration =
     storyboard.durationSeconds || adConfig.clipDurationSeconds || 8;
   const isUgc = isUgcStoryboard(storyboard, adConfig);
@@ -22,7 +28,7 @@ export function buildSceneVeoPrompt(storyboard, scene, adConfig, motionPromptOve
   const motionBase = stripDialogueFromMotionPrompt(
     motionPromptOverride ||
       scene.motionPrompt ||
-      buildFlowMotionPrompt(clipDuration, scene.visualBeat),
+      buildFlowMotionPrompt(clipDuration, scene.visualBeat, { bridging }),
   );
 
   if (useVeoNativeAudio) {
@@ -69,6 +75,7 @@ export async function animateSceneVideo({
     storyboardScene,
     adConfig,
     motionPromptOverride,
+    { bridging: useFlow },
   );
   const id = scene.id || `parte-${sceneIndex + 1}`;
 
@@ -137,5 +144,5 @@ export async function animateAllSceneVideos({
     clips.push(result);
   }
 
-  return { clips, clipCount: clips.length };
+  return { clips, clipCount: clips.length, veoFlow: isUgcFlow };
 }

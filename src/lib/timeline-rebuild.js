@@ -8,6 +8,7 @@ import { isLipSyncAvailable, lipSyncSceneClips } from "./lipsync.js";
 import {
   resolveCrossfadeSeconds,
   resolveVoicePipeline,
+  shouldUseUgcFlow,
 } from "./ugc-flow.js";
 
 /**
@@ -25,10 +26,12 @@ export async function rebuildTimelineVideo({
     throw new Error("Nenhum clip de vídeo para juntar.");
   }
 
+  const veoFlow = shouldUseUgcFlow(storyboard, adConfig, clipPaths.length);
   const crossfadeSeconds = resolveCrossfadeSeconds(
     storyboard,
     adConfig,
     clipPaths.length,
+    { veoFlow },
   );
   const { useExternalTts, useVeoNativeAudio } = resolveVoicePipeline(
     adConfig,
@@ -122,6 +125,7 @@ export async function rebuildTimelineVideo({
     finalVideo,
     clipCount: clipPaths.length,
     crossfadeSeconds,
+    veoFlow,
     voiceApplied: useExternalTts,
   };
 }

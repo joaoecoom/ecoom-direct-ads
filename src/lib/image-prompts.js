@@ -33,16 +33,21 @@ ${HUMAN_REALISM_NEGATIVE}`;
 }
 
 export function buildHumanizedVariationPrompt(visualBeat, sceneIndex, sceneTotal) {
-  return `${visualBeat}. Continuation frame ${sceneIndex}/${sceneTotal} of the SAME continuous selfie video.
-Same person, same room, same clothes, same phone angle — only natural micro-changes in expression and hand gesture mid-speech.
-Preserve all human realism details from reference — do NOT reset to generic AI face.
+  return `${visualBeat}. Frame ${sceneIndex}/${sceneTotal} of ONE continuous handheld UGC selfie video — same take, same person.
+SAME face identity: age, skin texture, hair, body type — preserve from reference frame exactly.
+Same phone distance and angle; only natural micro-movement (expression, slight head tilt, hand gesture).
+If the beat changes location, evolve the background gradually — never a jump-cut look.
+Preserve all human realism from reference — do NOT reset to generic AI face.
 ${HUMAN_REALISM_SUFFIX}
 ${HUMAN_REALISM_NEGATIVE}`;
 }
 
-export function buildFlowMotionPrompt(clipDurationSeconds, beat = "") {
+export function buildFlowMotionPrompt(clipDurationSeconds, beat = "", { bridging = false } = {}) {
   const beatPart = beat ? `${beat}. ` : "";
-  return `${beatPart}Single continuous take, subtle lip and head movement while speaking, minimal handheld phone shake, smooth natural motion, no jump cuts, no scene change, preserve exact face identity outfit and background from source image, UGC selfie, ${clipDurationSeconds} second clip`;
+  const bridge = bridging
+    ? "Continuous motion evolving smoothly toward the final frame, decelerate naturally at end, same person outfit and lighting, no jump cut, no scene reset, "
+    : "Single continuous take, ";
+  return `${beatPart}${bridge}subtle lip and head movement while speaking, minimal handheld phone shake, smooth natural motion, preserve exact face identity outfit and background from source image, UGC selfie, ${clipDurationSeconds} second clip`;
 }
 
 /** Remove blocos de diálogo/áudio — motionPrompt fica só visual. */

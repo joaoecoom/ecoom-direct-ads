@@ -6,6 +6,43 @@ import { timestampSlug } from "../config.js";
 
 const execFileAsync = promisify(execFile);
 
+const NORMALIZE_FPS = Number.parseInt(process.env.VIDEO_NORMALIZE_FPS || "30", 10);
+
+async function normalizeClipForConcat(inputPath, outputPath) {
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await execFileAsync(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      path.resolve(inputPath),
+      "-vf",
+      `fps=${NORMALIZE_FPS},format=yuv420p,setsar=1`,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "fast",
+      "-crf",
+      "18",
+      "-movflags",
+      "+faststart",
+      "-an",
+      path.resolve(outputPath),
+    ],
+    { stdio: "pipe" },
+  );
+  return outputPath;
+}
+
+async function normalizeClipsForConcat(inputPaths, workDir) {
+  const normalized = [];
+  for (let i = 0; i < inputPaths.length; i++) {
+    const out = path.join(workDir, `norm-${i}-${path.basename(inputPaths[i])}`);
+    normalized.push(await normalizeClipForConcat(inputPaths[i], out));
+  }
+  return normalized;
+}
+
 async function getVideoDuration(filePath) {
   const { stdout } = await execFileAsync(
     "ffprobe",
@@ -91,7 +128,7 @@ function buildAudioCrossfadeFilter(inputCount, d) {
 export async function concatenateVideosWithCrossfade(
   inputPaths,
   outputPath,
-  { crossfadeSeconds = 0.35, keepAudio = false } = {},
+  { crossfadeSeconds = 0.6, keepAudio = false } = {},
 ) {
   if (inputPaths.length === 0) {
     throw new Error("Nenhum clip para juntar.");
@@ -108,11 +145,29 @@ export async function concatenateVideosWithCrossfade(
     durations.push(await getVideoDuration(p));
   }
 
-  const d = Math.min(crossfadeSeconds, ...durations.map((x) => x * 0.25));
+  const d = Math.min(
+    crossfadeSeconds,
+    ...durations.map((x) => x * 0.35),
+  );
   console.log(`   Crossfade: ${d.toFixed(2)}s entre ${inputPaths.length} clips`);
 
-  const inputs = inputPaths.flatMap((p) => ["-i", path.resolve(p)]);
-  const videoFilter = buildVideoCrossfadeFilter(inputPaths.length, durations, d);
+  const workDir = path.join(path.dirname(outputPath), `xfade-${timestampSlug()}`);
+  let pathsToJoin = inputPaths;
+  try {
+    pathsToJoin = await normalizeClipsForConcat(inputPaths, workDir);
+    durations.length = 0;
+    for (const p of pathsToJoin) {
+      durations.push(await getVideoDuration(p));
+    }
+  } catch (err) {
+    console.log(`   ⚠️ Normalização de clips falhou (${err.message}) — a usar originais...\n`);
+    pathsToJoin = inputPaths;
+  }
+
+  const dFinal = Math.min(crossfadeSeconds, ...durations.map((x) => x * 0.35));
+
+  const inputs = pathsToJoin.flatMap((p) => ["-i", path.resolve(p)]);
+  const videoFilter = buildVideoCrossfadeFilter(pathsToJoin.length, durations, dFinal);
   const useAudio = keepAudio && (await allClipsHaveAudio(inputPaths));
 
   async function runFfmpeg(filterComplex, includeAudio) {
@@ -143,7 +198,10 @@ export async function concatenateVideosWithCrossfade(
 
   if (useAudio) {
     try {
-      await runFfmpeg(`${videoFilter};${buildAudioCrossfadeFilter(inputPaths.length, d)}`, true);
+      await runFfmpeg(
+        `${videoFilter};${buildAudioCrossfadeFilter(pathsToJoin.length, dFinal)}`,
+        true,
+      );
       return outputPath;
     } catch (err) {
       console.log(

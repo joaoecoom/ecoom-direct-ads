@@ -144,10 +144,14 @@ function applyUgcRules(storyboard, config) {
     }
 
     if (!scene.motionPrompt || scene.motionPrompt.length < 40) {
+      const bridging = i < storyboard.scenes.length - 1;
       scene.motionPrompt = buildFlowMotionPrompt(
         config.clipDurationSeconds,
         scene.visualBeat || scene.role,
+        { bridging },
       );
+    } else if (i < storyboard.scenes.length - 1) {
+      scene.motionPrompt = `${scene.motionPrompt} Smooth transition into next beat — no hard cut, continuous take feel.`;
     }
   }
 

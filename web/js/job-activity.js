@@ -9,6 +9,7 @@ const PIPELINE_BY_TYPE = {
   videos: ["queued", "video", "done"],
   scene_video: ["queued", "video", "done"],
   rebuild: ["queued", "rebuild", "done"],
+  variations: ["queued", "image", "done"],
 };
 
 const STEP_LABELS = {

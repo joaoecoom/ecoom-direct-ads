@@ -299,6 +299,38 @@ app.delete("/api/assets/:id", async (req, res) => {
   res.status(204).end();
 });
 
+app.post("/api/projects/:id/assets/:assetId/variations", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const source = await getAsset(req.params.assetId);
+  if (!source || source.projectId !== req.params.id) {
+    return res.status(404).json({ error: "Asset não encontrado neste projecto" });
+  }
+  if (source.type !== "image") {
+    return res.status(400).json({ error: "Variações só a partir de imagens" });
+  }
+
+  const count = Math.min(Math.max(1, Number(req.body?.count) || 5), 12);
+  const prompt = String(req.body?.prompt || "").trim();
+  const id = randomUUID().slice(0, 8);
+
+  await createJob({
+    id,
+    type: "variations",
+    request: {
+      type: "variations",
+      projectId: req.params.id,
+      sourceAssetId: req.params.assetId,
+      count,
+      prompt,
+    },
+  });
+
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "variations", count });
+});
+
 app.post("/api/projects/:id/blueprint", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });

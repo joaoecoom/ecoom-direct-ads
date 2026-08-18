@@ -23,8 +23,10 @@ import { safeUpdateJob, updateJob } from "./job-store.js";
 import { pickAdOverrides } from "./ad-overrides.js";
 import { rebuildTimelineVideo } from "../src/lib/timeline-rebuild.js";
 import { resolveCreative } from "./creative-store.js";
+import { shouldUseUgcFlow } from "../src/lib/ugc-flow.js";
 import { resolveSceneVideoPath } from "./timeline.js";
 import { syncGenerationAssetsToProject } from "./project-sync.js";
+import { generateAssetVariations } from "../src/lib/asset-variations.js";
 
 export function loadStoryboardForProject(project, creativeId = null) {
   const creative = resolveCreative(project, creativeId);
@@ -48,6 +50,7 @@ export async function runJob(job, onProgress) {
   if (type === "videos") return runVideosJob(job, onProgress);
   if (type === "scene_video") return runSceneVideoJob(job, onProgress);
   if (type === "rebuild") return runRebuildJob(job, onProgress);
+  if (type === "variations") return runVariationsJob(job, onProgress);
   return runFullAdJob(job, onProgress);
 }
 
@@ -428,13 +431,15 @@ async function runVideosJob(job, onProgress) {
 }
 
 async function runSceneVideoJob(job, onProgress) {
-  const { projectId, sceneId, motionPrompt: motionPromptOverride } = job.request;
+  const { projectId, sceneId, motionPrompt: motionPromptOverride, creativeId } = job.request;
   const project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
+  const cid = creativeId || project.activeCreativeId;
 
-  const { storyboard } = loadStoryboardForProject(project);
+  const { storyboard } = loadStoryboardForProject(project, cid);
   const adConfig = resolveAdConfig(project.settings || {});
-  const scenes = project.scenes || [];
+  const creative = resolveCreative(project, cid);
+  const scenes = creative?.scenes || [];
   const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
   if (sceneIndex === -1) throw new Error(`Cena ${sceneId} não encontrada`);
 
@@ -442,16 +447,19 @@ async function runSceneVideoJob(job, onProgress) {
   const imagePath = await resolveSceneImagePath(project, scene);
 
   let lastFramePath = null;
-  if (storyboard.style === "ugc" && sceneIndex < scenes.length - 1) {
+  if (shouldUseUgcFlow(storyboard, adConfig, scenes.length) && sceneIndex < scenes.length - 1) {
     const next = scenes[sceneIndex + 1];
     if (next?.imageAssetId) {
       lastFramePath = await resolveSceneImagePath(project, next);
     }
   }
 
-  await updateProjectScene(projectId, sceneId, {
-    status: { video: "generating" },
-  });
+  await updateProjectScene(
+    projectId,
+    sceneId,
+    { status: { video: "generating" } },
+    cid,
+  );
 
   onProgress?.({
     step: "video",
@@ -487,6 +495,7 @@ async function runSceneVideoJob(job, onProgress) {
     prompt: clip.prompt,
     jobId: job.id,
     order: sceneIndex,
+    creativeId: cid,
   });
 
   return { assetId: asset.id, sceneId, clipPath: clip.path };
@@ -560,6 +569,63 @@ async function runRebuildJob(job, onProgress) {
     clipCount: result.clipCount,
     crossfadeSeconds: result.crossfadeSeconds,
   };
+}
+
+async function runVariationsJob(job, onProgress) {
+  const { projectId, sourceAssetId, prompt, count } = job.request;
+  if (!projectId || !sourceAssetId) {
+    throw new Error("projectId e sourceAssetId obrigatórios");
+  }
+
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const source = await getAsset(sourceAssetId);
+  if (!source || source.type !== "image") {
+    throw new Error("Asset fonte tem de ser uma imagem");
+  }
+
+  const referencePath = resolveAssetFile(source);
+  const adConfig = resolveAdConfig(project.settings || {});
+  const outputDir = path.join(
+    PROJECT_ROOT,
+    "assets",
+    `project-${projectId}`,
+    `variations-${job.id}`,
+  );
+
+  onProgress?.({ step: "image", message: "A gerar variações..." });
+
+  const { variations } = await generateAssetVariations({
+    referenceImagePath: referencePath,
+    prompt,
+    count: count || 5,
+    outputDir,
+    aspectRatio: adConfig.aspectRatio || "9:16",
+    onProgress: (u) =>
+      onProgress?.({
+        step: u.step,
+        message: u.message,
+        sceneIndex: u.sceneIndex,
+        sceneTotal: u.sceneTotal,
+      }),
+  });
+
+  const assetIds = [];
+  for (const v of variations) {
+    const asset = await createAsset({
+      projectId,
+      type: "image",
+      source: "variation",
+      prompt: v.prompt,
+      sourcePath: v.path,
+      metadata: { order: v.order, jobId: job.id, sourceAssetId, variation: true },
+    });
+    assetIds.push(asset.id);
+    await addProjectAssetId(projectId, asset.id);
+  }
+
+  return { assetIds, variationCount: assetIds.length, sourceAssetId };
 }
 
 export async function persistJobProgress(jobId, update) {
