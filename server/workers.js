@@ -17,7 +17,7 @@ import {
   updateProject,
   updateProjectScene,
 } from "./project-store.js";
-import { updateJob } from "./job-store.js";
+import { pickAdOverrides } from "./ad-overrides.js";
 import { rebuildTimelineVideo } from "../src/lib/timeline-rebuild.js";
 import { resolveSceneVideoPath } from "./timeline.js";
 
@@ -90,15 +90,17 @@ async function runCopyJob(job, onProgress) {
 }
 
 async function runFullAdJob(job, onProgress) {
-  const { offer, overrides, projectId, approvedCopy, wizard } = job.request;
+  const { offer, overrides = {}, projectId, approvedCopy, wizard } = job.request;
   let copy = approvedCopy;
   if (!copy && projectId) {
     copy = (await getProject(projectId))?.latestCopy;
   }
 
+  await onProgress?.({ step: "config", message: "A preparar pipeline completo..." });
+
   const result = await runAdGeneration({
     offer,
-    overrides: { ...overrides, useCopyFirst: !copy },
+    overrides: { ...pickAdOverrides(overrides), useCopyFirst: !copy },
     runId: job.id,
     approvedCopy: copy || null,
     wizard,

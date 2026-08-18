@@ -1,10 +1,12 @@
 import {
-  createJob,
+  animateAllVideos,
+  assetFileUrl,
   fetchConfig,
-  fetchJob,
   fetchJobCopy,
+  fetchProjectExports,
+  generateBlueprint,
+  generateAllImages,
   generateCopy,
-  jobVideoUrl,
 } from "./api.js";
 import {
   getBuiltBrief,
@@ -268,6 +270,19 @@ async function onGenerateCopy() {
   }
 }
 
+function runJobAndWait(jobId, jobType) {
+  return new Promise((resolve, reject) => {
+    trackJob(jobId, {
+      jobType,
+      pollMs: 1000,
+      onUpdate: setJobUI,
+      onMissing: (msg) => reject(new Error(msg)),
+      onComplete: resolve,
+      onFailed: (job) => reject(new Error(job.error || "Job falhou")),
+    });
+  });
+}
+
 async function onGenerateVideo() {
   hideError();
   const brief = getBrief();
@@ -295,52 +310,42 @@ async function onGenerateVideo() {
     const project = await resolveActiveProject();
     const wizard = getWizardState();
     const settings = wizardToSettings(wizard, config);
-    const data = await createJob({
+
+    // Fluxo faseado — mais fiável e com progresso visível por etapa
+    const bp = await generateBlueprint(project.id, {
       offer: brief,
-      projectId: project.id,
       approvedCopy: copy,
+      overrides: settings,
       wizard,
-      ...settings,
     });
+    await runJobAndWait(bp.jobId, "blueprint");
 
-    void linkJobToProject(activeProjectId, data.jobId);
-    const job = (await fetchJob(data.jobId)) || {
-      id: data.jobId,
-      status: "queued",
-      progress: { message: "Na fila…" },
-    };
-    setJobUI(job);
+    const im = await generateAllImages(project.id);
+    await runJobAndWait(im.jobId, "images");
 
-    trackJob(data.jobId, {
-      jobType: "full_ad",
-      pollMs: 1000,
-      onUpdate: setJobUI,
-      onMissing: (msg) => showError(msg),
-      onComplete: async (completedJob) => {
-        setJobUI(completedJob);
-        els.resultVideo.src = `${jobVideoUrl(data.jobId)}?t=${Date.now()}`;
-        els.videoWrap.classList.remove("hidden");
-        const resultCopy = await fetchJobCopy(data.jobId);
-        if (resultCopy) {
-          els.copyBlock.textContent = formatCopyForDisplay(resultCopy);
-          els.copyHeading.classList.remove("hidden");
-          els.copyBlock.classList.remove("hidden");
-        }
-        els.genVideoBtn.disabled = false;
-        els.genVideoBtn.textContent = "Gerar Vídeo Completo";
-        window.dispatchEvent(
-          new CustomEvent("ecoom:job-complete", {
-            detail: { projectId: activeProjectId, jobId: data.jobId },
-          }),
-        );
-      },
-      onFailed: (failedJob) => {
-        setJobUI(failedJob);
-        showError(failedJob.error || "Geração falhou");
-        els.genVideoBtn.disabled = false;
-        els.genVideoBtn.textContent = "Gerar Vídeo Completo";
-      },
-    });
+    const vid = await animateAllVideos(project.id);
+    await runJobAndWait(vid.jobId, "videos");
+
+    const fin = await rebuildTimeline(project.id);
+    await runJobAndWait(fin.jobId, "rebuild");
+
+    void linkJobToProject(project.id, fin.jobId);
+    const exports = await fetchProjectExports(project.id);
+    if (exports.latestExport?.assetId) {
+      els.resultVideo.src = `${assetFileUrl(exports.latestExport.assetId)}?t=${Date.now()}`;
+      els.videoWrap.classList.remove("hidden");
+    }
+    els.copyBlock.textContent = formatCopyForDisplay(copy);
+    els.copyHeading.classList.remove("hidden");
+    els.copyBlock.classList.remove("hidden");
+
+    els.genVideoBtn.disabled = false;
+    els.genVideoBtn.textContent = "Gerar Vídeo Completo";
+    window.dispatchEvent(
+      new CustomEvent("ecoom:job-complete", {
+        detail: { projectId: project.id, jobId: fin.jobId },
+      }),
+    );
   } catch (err) {
     showError(err.message || "Erro desconhecido");
     els.genVideoBtn.disabled = false;

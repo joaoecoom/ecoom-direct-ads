@@ -33,8 +33,8 @@ export async function runAdGeneration({
   wizard = null,
   onProgress,
 }) {
-  const progress = (step, message, extra = {}) => {
-    onProgress?.({ step, message, runId, ...extra });
+  const progress = async (step, message, extra = {}) => {
+    if (onProgress) await onProgress({ step, message, runId, ...extra });
   };
 
   if (!offer?.trim()) {
@@ -45,10 +45,10 @@ export async function runAdGeneration({
   const config = loadConfig();
   await ensureOutputDir(config.outputDir);
 
-  progress("config", formatAdConfigSummary(adConfig), { adConfig, offer });
+  await progress("config", formatAdConfigSummary(adConfig), { adConfig, offer });
 
   if (copyOnly) {
-    progress("copy", "A escrever copy — hook, argumento e CTA...");
+    await progress("copy", "A escrever copy — hook, argumento e CTA...");
     const copy = await generateAdCopy({
       offer,
       overrides: adConfig,
@@ -56,13 +56,13 @@ export async function runAdGeneration({
     });
     const copyPath = path.join(config.outputDir, `copy-${runId}.json`);
     await fs.writeFile(copyPath, JSON.stringify(copy, null, 2));
-    progress("done", "Copy pronta para revisão.");
+    await progress("done", "Copy pronta para revisão.");
     return { runId, copy, copyPath, adConfig };
   }
 
   let copy = approvedCopy;
   if (!copy && overrides.useCopyFirst !== false) {
-    progress("copy", "A escrever copy — hook, argumento e CTA...");
+    await progress("copy", "A escrever copy — hook, argumento e CTA...");
     copy = await generateAdCopy({
       offer,
       overrides: adConfig,
@@ -72,7 +72,7 @@ export async function runAdGeneration({
 
   let storyboard;
   if (copy) {
-    progress(
+    await progress(
       "storyboard",
       `A planear ${copy.targetDurationSeconds ? `~${copy.targetDurationSeconds}s · ` : ""}cenas a partir da copy...`,
     );
@@ -82,7 +82,7 @@ export async function runAdGeneration({
       adConfig: adConfig,
     });
   } else {
-    progress("storyboard", "A gerar storyboard com Gemini...");
+    await progress("storyboard", "A gerar storyboard com Gemini...");
     storyboard = await generateStoryboard({ offer, adConfig });
   }
 
@@ -120,8 +120,8 @@ export async function runAdGeneration({
     storyboard,
     adConfig,
     outputDir: assetsRunDir,
-    onProgress: (update) => {
-      progress("image", update.message, {
+    onProgress: async (update) => {
+      await progress("image", update.message, {
         sceneIndex: update.sceneIndex,
         sceneTotal: update.sceneTotal,
         sceneId: update.sceneId,
@@ -181,7 +181,7 @@ export async function runAdGeneration({
   const videoSuffix = useVeoNativeAudio ? "" : "-silent";
   const silentPath = path.join(config.outputDir, `${slug}-${runId}${videoSuffix}.mp4`);
 
-  progress("video", `A animar ${sceneTotal} cena(s) com Veo...`, { sceneTotal });
+  await progress("video", `A animar ${sceneTotal} cena(s) com Veo...`, { sceneTotal });
 
   const useFlow = isUgc && sceneTotal > 1;
 
@@ -195,7 +195,7 @@ export async function runAdGeneration({
     outputFileName: path.basename(silentPath),
     storyboard,
     scenes: sequenceScenes,
-    onProgress: (update) =>
+    onProgress: async (update) =>
       progress("video", update.message, {
         sceneIndex: update.sceneIndex,
         sceneTotal: update.sceneTotal,
@@ -206,7 +206,7 @@ export async function runAdGeneration({
   let finalVideo = manifest.finalVideo;
 
   if (useExternalTts) {
-    progress("voice", "A gerar voz PT-PT...");
+    await progress("voice", "A gerar voz PT-PT...");
     const audioDir = path.join(config.outputDir, `audio-${runId}`);
     const voiceParts = await generateSceneVoiceovers(storyboard.scenes, audioDir, {
       languageVariant: adConfig.languageVariant,
@@ -226,11 +226,11 @@ export async function runAdGeneration({
 
     let voicedClips;
     if (isLipSyncAvailable()) {
-      progress("lipsync", "Lip sync Sync Labs...");
+      await progress("lipsync", "Lip sync Sync Labs...");
       const syncedDir = path.join(config.outputDir, `synced-${runId}`);
       voicedClips = await lipSyncSceneClips(sceneClips, syncedDir);
     } else {
-      progress("mix", "A mixar áudio (sem lip sync)...");
+      await progress("mix", "A mixar áudio (sem lip sync)...");
       const voicedDir = path.join(config.outputDir, `voiced-${runId}`);
       voicedClips = await mixSceneClipsWithVoice(sceneClips, voicedDir);
     }
@@ -259,7 +259,7 @@ export async function runAdGeneration({
 
   await fs.writeFile(copyPath, JSON.stringify(exportCopy, null, 2));
 
-  progress("done", "Anúncio concluído.", { finalVideo, copyPath });
+  await progress("done", "Anúncio concluído.", { finalVideo, copyPath });
 
   return {
     runId,

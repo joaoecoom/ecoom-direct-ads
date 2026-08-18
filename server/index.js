@@ -39,6 +39,7 @@ import {
   updateProjectScene,
 } from "./project-store.js";
 import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
+import { pickAdOverrides } from "./ad-overrides.js";
 import { buildTimelineView } from "./timeline.js";
 import { buildExportView } from "./exports.js";
 
@@ -49,6 +50,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "*";
 
 let activeJobId = null;
 const queue = [];
+const STALE_JOB_MS = Number.parseInt(process.env.JOB_STALE_MS || "180000", 10); // 3 min sem progresso
 
 const app = express();
 app.use(
@@ -74,6 +76,21 @@ app.get("/health", (_req, res) => {
 
 app.get("/api/queue/status", (_req, res) => {
   res.json({ activeJobId, queueLength: queue.length, queuedIds: [...queue] });
+});
+
+/** Libertar fila quando job ficou preso (sem progresso). */
+app.post("/api/queue/reset", async (_req, res) => {
+  const stuckId = activeJobId;
+  if (stuckId) {
+    await safeUpdateJob(stuckId, {
+      status: "failed",
+      error: "Job cancelado — estava bloqueado. Tenta Images → Videos passo a passo.",
+      progress: { step: "error", message: "Job libertado manualmente" },
+    });
+    activeJobId = null;
+  }
+  processQueue();
+  res.json({ ok: true, clearedJobId: stuckId || null, queueLength: queue.length });
 });
 
 app.get("/api/config", (_req, res) => {
@@ -494,7 +511,7 @@ app.get("/api/jobs/:id/copy", async (req, res) => {
 });
 
 app.post("/api/jobs", async (req, res) => {
-  const { offer, projectId, ...overrides } = req.body || {};
+  const { offer, projectId, wizard, approvedCopy, ...rawOverrides } = req.body || {};
   if (!offer?.trim()) {
     return res.status(400).json({ error: "Campo 'offer' (brief) é obrigatório." });
   }
@@ -506,6 +523,7 @@ app.post("/api/jobs", async (req, res) => {
     }
   }
 
+  const overrides = pickAdOverrides(rawOverrides);
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
@@ -514,8 +532,8 @@ app.post("/api/jobs", async (req, res) => {
       type: "full_ad",
       offer: offer.trim(),
       overrides,
-      wizard: req.body?.wizard || null,
-      approvedCopy: req.body?.approvedCopy || null,
+      wizard: wizard || null,
+      approvedCopy: approvedCopy || null,
       projectId: projectId || null,
     },
   });
@@ -619,4 +637,30 @@ app.listen(PORT, () => {
   console.log(`   Frontend CORS: ${FRONTEND_URL}`);
   console.log(`   Root: ${ROOT}\n`);
   void recoverQueueOnStartup();
+
+  setInterval(async () => {
+    if (!activeJobId) return;
+    try {
+      const job = await getJob(activeJobId);
+      if (!job || job.status !== "running") {
+        activeJobId = null;
+        processQueue();
+        return;
+      }
+      const updated = new Date(job.updatedAt || job.createdAt).getTime();
+      if (Date.now() - updated > STALE_JOB_MS) {
+        console.error(`[queue] Job ${activeJobId} sem progresso — a libertar fila`);
+        await safeUpdateJob(activeJobId, {
+          status: "failed",
+          error:
+            "Job bloqueado (sem progresso). Usa Images → Blueprint → Videos passo a passo, ou tenta outra vez.",
+          progress: { step: "error", message: "Timeout — fila libertada" },
+        });
+        activeJobId = null;
+        processQueue();
+      }
+    } catch (err) {
+      console.error("[queue] Watchdog:", err.message);
+    }
+  }, 60_000);
 });
