@@ -365,6 +365,7 @@ app.post("/api/projects/:id/scenes/:sceneId/image", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
 
+  const creativeId = await resolveJobCreativeId(project, req);
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
@@ -373,6 +374,7 @@ app.post("/api/projects/:id/scenes/:sceneId/image", async (req, res) => {
       type: "scene_image",
       projectId: req.params.id,
       sceneId: req.params.sceneId,
+      creativeId,
     },
   });
 

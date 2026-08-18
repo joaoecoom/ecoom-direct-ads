@@ -81,3 +81,14 @@ export function resolveModelId(requested) {
   const found = VEO_MODELS.find((m) => m.id === requested);
   return found?.id ?? requested;
 }
+
+/** Evita path.join(outputDir, caminhoAbsoluto) duplicar o prefixo no Linux. */
+export function resolveLocalOutputPath(outputDir, outputFileName, fallbackName) {
+  if (!outputFileName) {
+    return path.join(outputDir, fallbackName);
+  }
+  if (path.isAbsolute(outputFileName)) {
+    return path.normalize(outputFileName);
+  }
+  return path.join(outputDir, outputFileName);
+}

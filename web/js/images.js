@@ -8,7 +8,7 @@ import {
   syncJobToProject,
   uploadAsset,
 } from "./api.js";
-import { trackJob, stopJobTracking } from "./job-activity.js";
+import { trackJob, stopJobTracking, waitForJob } from "./job-activity.js";
 import { ensureProjectOnServer, getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
@@ -16,6 +16,7 @@ let activeProjectId = null;
 
 export function initImagesTab(projectId) {
   activeProjectId = projectId;
+  hideImagesError();
   bindImageEvents();
   void renderImagesPanel(projectId);
 }
@@ -50,9 +51,59 @@ function hideImagesError() {
   document.getElementById("images-error")?.classList.add("hidden");
 }
 
+function renderPipelineHint(project) {
+  const hint = document.getElementById("images-pipeline-hint");
+  if (!hint) return;
+
+  const hasBlueprint = Boolean(project?.blueprintPath);
+  const hasCopy = Boolean(project?.latestCopy || project?.activeCreative?.copy);
+  const scenes = project?.scenes || [];
+  const imagesReady = scenes.some((s) => s.imageAssetId);
+
+  if (imagesReady) {
+    hint.classList.add("hidden");
+    return;
+  }
+
+  hint.classList.remove("hidden");
+  if (!hasCopy) {
+    hint.innerHTML =
+      '<p class="muted">Passo 1: no <strong>Create Ad</strong>, gera a copy. Para tudo automático, usa <strong>Gerar Vídeo Completo</strong>.</p>';
+  } else if (!hasBlueprint) {
+    hint.innerHTML =
+      '<p class="muted">Copy pronta ✓ — <strong>Generate All Images</strong> cria o blueprint e as imagens. Ou no Create Ad: <strong>Gerar Vídeo Completo</strong>.</p>';
+  } else {
+    hint.innerHTML =
+      '<p class="muted">Blueprint pronto ✓ — clica <strong>Generate All Images</strong>. Para vídeo final: tab Videos ou <strong>Gerar Vídeo Completo</strong>.</p>';
+  }
+}
+
+function defaultImagesStatus(project) {
+  const hasBlueprint = Boolean(project?.blueprintPath);
+  const hasCopy = Boolean(project?.latestCopy || project?.activeCreative?.copy);
+  if (!hasCopy) {
+    return "Gera copy no Create Ad — ou usa «Gerar Vídeo Completo» para o fluxo completo.";
+  }
+  if (!hasBlueprint) {
+    return "Copy pronta — «Generate All Images» cria blueprint + imagens automaticamente.";
+  }
+  return "Blueprint pronto — gera imagens ou usa «Gerar Vídeo Completo» no Create Ad.";
+}
+
 function setImagesStatus(msg) {
   const el = document.getElementById("images-status");
-  if (el) el.textContent = msg;
+  if (el) {
+    el.textContent = msg;
+    if (msg) el.dataset.busy = "1";
+    else delete el.dataset.busy;
+  }
+}
+
+function clearImagesStatus(project) {
+  const el = document.getElementById("images-status");
+  if (el && !el.dataset.busy) {
+    el.textContent = defaultImagesStatus(project);
+  }
 }
 
 function renderAvatarPanel(project, assetById) {
@@ -113,22 +164,10 @@ function renderReferencesPanel(project, assets) {
 
 export async function renderImagesPanel(projectId) {
   activeProjectId = projectId;
-  hideImagesError();
 
   const project = getProject(projectId);
   const grid = document.getElementById("scene-images-grid");
   if (!grid) return;
-
-  const hasBlueprint = Boolean(
-    project?.blueprintPath || project?.blueprint || project?.scenes?.length,
-  );
-
-  document.getElementById("references-panel")?.classList.toggle("hidden", !hasBlueprint);
-
-  document.getElementById("btn-gen-all-images")?.toggleAttribute(
-    "disabled",
-    !hasBlueprint,
-  );
 
   let assets = [];
   let scenes = project?.scenes || [];
@@ -139,6 +178,26 @@ export async function renderImagesPanel(projectId) {
     scenes = data.scenes?.length ? data.scenes : scenes;
   } catch {
     /* offline */
+  }
+
+  const hasBlueprint = Boolean(project?.blueprintPath);
+  const hasCopy = Boolean(project?.latestCopy || project?.activeCreative?.copy);
+  const canGenerateImages = hasBlueprint || hasCopy;
+
+  renderPipelineHint(project);
+  clearImagesStatus(project);
+
+  document.getElementById("references-panel")?.classList.toggle("hidden", !hasBlueprint);
+
+  document.getElementById("btn-gen-all-images")?.toggleAttribute(
+    "disabled",
+    !canGenerateImages,
+  );
+
+  if (scenes.length && !hasBlueprint && hasCopy) {
+    showImagesError(
+      "Cenas antigas sem blueprint actual — «Generate All Images» recria o storyboard e gera imagens.",
+    );
   }
 
   const assetById = Object.fromEntries(assets.map((a) => [a.id, a]));
@@ -153,8 +212,8 @@ export async function renderImagesPanel(projectId) {
   if (!scenes.length) {
     grid.innerHTML = `
       <div class="empty-state card">
-        <p class="muted">Gera o <strong>Blueprint</strong> primeiro — cria storyboard + prompts por cena.</p>
-        <p class="muted">Depois: <strong>Generate All Images</strong> anima cada cena.</p>
+        <p class="muted">Gera copy no <strong>Create Ad</strong>, depois clica <strong>Generate All Images</strong> (blueprint + imagens).</p>
+        <p class="muted">Ou usa <strong>Gerar Vídeo Completo</strong> para copy → imagens → vídeo → export num só fluxo.</p>
       </div>`;
     return;
   }
@@ -241,17 +300,68 @@ async function onGenerateAllImages() {
   if (!activeProjectId) return;
   hideImagesError();
   const btn = document.getElementById("btn-gen-all-images");
+  const btnBlueprint = document.getElementById("btn-gen-blueprint");
   btn.disabled = true;
-  setImagesStatus("A gerar imagens...");
+  btnBlueprint?.setAttribute("disabled", "");
 
   try {
-    const project = await ensureProjectOnServer(activeProjectId);
+    let project = await ensureProjectOnServer(activeProjectId);
     activeProjectId = project.id;
+
+    const hasCopy = Boolean(project.latestCopy || project.activeCreative?.copy);
+    let hasBlueprint = Boolean(project.blueprintPath);
+
+    if (!hasCopy && !hasBlueprint) {
+      throw new Error(
+        "Gera copy primeiro (Create Ad) ou usa «Gerar Vídeo Completo» para o fluxo completo.",
+      );
+    }
+
+    if (!hasBlueprint) {
+      setImagesStatus("Passo 1/2: A gerar blueprint (storyboard)...");
+      const bp = await generateBlueprint(project.id, {
+        offer: project.masterPrompt,
+        approvedCopy: project.latestCopy || project.activeCreative?.copy,
+      });
+      await waitForJob(bp.jobId, { jobType: "blueprint" });
+      await initProjects();
+      project = getProject(activeProjectId);
+      hasBlueprint = Boolean(project?.blueprintPath);
+      if (!hasBlueprint) {
+        throw new Error("Blueprint não ficou disponível — tenta outra vez.");
+      }
+    }
+
+    setImagesStatus(hasBlueprint ? "A gerar imagens..." : "Passo 2/2: A gerar imagens...");
     const data = await generateAllImages(project.id);
-    startJobPoll(data.jobId, "Images");
+    await waitForJob(data.jobId, {
+      jobType: "images",
+      onUpdate: (job) => {
+        const scene =
+          job.progress?.sceneIndex && job.progress?.sceneTotal
+            ? ` (${job.progress.sceneIndex}/${job.progress.sceneTotal})`
+            : "";
+        setImagesStatus(`Imagens${scene}: ${job.progress?.message || job.status}`);
+      },
+    });
+
+    await initProjects();
+    await renderImagesPanel(activeProjectId);
+    setImagesStatus("Imagens concluídas");
+    window.dispatchEvent(
+      new CustomEvent("ecoom:job-complete", {
+        detail: { projectId: activeProjectId, jobId: data.jobId },
+      }),
+    );
   } catch (err) {
     showImagesError(err.message);
+  } finally {
     btn.disabled = false;
+    btnBlueprint?.removeAttribute("disabled");
+    const project = getProject(activeProjectId);
+    delete document.getElementById("images-status")?.dataset.busy;
+    clearImagesStatus(project);
+    await renderImagesPanel(activeProjectId);
   }
 }
 

@@ -10,7 +10,6 @@ import {
   applyBlueprint,
   ensureActiveCreative,
   getProject,
-  linkAssetToScene,
   linkJobToProject,
   registerSceneImageAsset,
   registerSceneVideoAsset,
@@ -290,26 +289,30 @@ async function runImagesJob(job, onProgress) {
 }
 
 async function runSceneImageJob(job, onProgress) {
-  const { projectId, sceneId } = job.request;
+  const { projectId, sceneId, creativeId } = job.request;
   const project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
+  const cid = creativeId || project.activeCreativeId;
 
-  const { storyboard } = loadStoryboardForProject(project);
+  const { storyboard } = loadStoryboardForProject(project, cid);
   const adConfig = resolveAdConfig(project.settings || {});
   const creative = resolveCreative(project, cid);
   const scenes = creative?.scenes || [];
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, job.id);
 
-  await updateProjectScene(projectId, sceneId, {
-    status: { image: "generating" },
-  });
+  await updateProjectScene(
+    projectId,
+    sceneId,
+    { status: { image: "generating" } },
+    cid,
+  );
 
   onProgress?.({ step: "image", message: `A regenerar imagem: ${sceneId}` });
 
-  const sceneIndex = project.scenes.findIndex((s) => s.id === sceneId);
+  const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
   let referenceImagePath = null;
   if (sceneIndex > 0) {
-    const prevScene = project.scenes[sceneIndex - 1];
+    const prevScene = scenes[sceneIndex - 1];
     if (prevScene?.imageAssetId) {
       const prevAsset = await getAsset(prevScene.imageAssetId);
       if (prevAsset) referenceImagePath = resolveAssetFile(prevAsset);
@@ -334,7 +337,7 @@ async function runSceneImageJob(job, onProgress) {
     metadata: { order: img.order, jobId: job.id, regenerated: true },
   });
 
-  await linkAssetToScene(projectId, sceneId, asset.id);
+  await registerSceneImageAsset(projectId, sceneId, asset.id, cid);
   await addProjectAssetId(projectId, asset.id);
 
   return { assetId: asset.id, sceneId };

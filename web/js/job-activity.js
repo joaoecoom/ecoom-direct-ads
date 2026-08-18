@@ -271,6 +271,17 @@ export function trackJob(jobId, options = {}) {
   pollTimer = setInterval(poll, pollMs);
 }
 
+export function waitForJob(jobId, options = {}) {
+  return new Promise((resolve, reject) => {
+    trackJob(jobId, {
+      ...options,
+      onComplete: resolve,
+      onFailed: (job) => reject(new Error(job.error || "Job falhou")),
+      onMissing: (msg) => reject(new Error(msg)),
+    });
+  });
+}
+
 export function hideJobActivity(delayMs = 8000) {
   if (delayMs <= 0) {
     showPanel(false);

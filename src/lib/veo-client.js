@@ -6,6 +6,7 @@ import {
   ensureOutputDir,
   loadConfig,
   parseGcsUri,
+  resolveLocalOutputPath,
   resolveModelId,
   sleep,
   timestampSlug,
@@ -13,6 +14,34 @@ import {
 import { normalizeClipDuration as normalizeAdClipDuration } from "./ad-config.js";
 
 export const POLL_MS = 15_000;
+
+const VEO_RETRY_MS = 30_000;
+const VEO_MAX_RETRIES = 4;
+
+function isVeoRetryableError(err) {
+  const msg = typeof err === "string" ? err : err?.message || JSON.stringify(err);
+  return (
+    msg.includes("high load") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes('"code": 8') ||
+    msg.includes("code: 8") ||
+    msg.includes("429")
+  );
+}
+
+async function withVeoRetry(label, fn) {
+  for (let attempt = 1; attempt <= VEO_MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isVeoRetryableError(err) || attempt === VEO_MAX_RETRIES) throw err;
+      console.log(
+        `   ⏳ ${label}: Veo sobrecarregado — retry ${attempt}/${VEO_MAX_RETRIES}...\n`,
+      );
+      await sleep(VEO_RETRY_MS * attempt);
+    }
+  }
+}
 
 export function normalizeClipDuration(seconds = 10) {
   return normalizeAdClipDuration(seconds);
@@ -148,17 +177,24 @@ export async function generateVideoFromText({
     videoConfig.enhancePrompt = true;
   }
 
-  let operation = await client.models.generateVideos({
-    model,
-    prompt,
-    config: videoConfig,
+  let operation = await withVeoRetry("Veo text-to-video", async () => {
+    let op = await client.models.generateVideos({
+      model,
+      prompt,
+      config: videoConfig,
+    });
+    op = await waitForVideoOperation(client, op);
+    return op;
   });
 
-  operation = await waitForVideoOperation(client, operation);
   const gcsUri = extractGcsUriFromOperation(operation);
 
-  const localName = outputFileName || `veo-${timestampSlug()}.mp4`;
-  const localPath = path.join(config.outputDir, localName);
+  const localPath = resolveLocalOutputPath(
+    config.outputDir,
+    outputFileName,
+    `veo-${timestampSlug()}.mp4`,
+  );
+  await ensureOutputDir(path.dirname(localPath));
   await downloadFromGcs(gcsUri, localPath);
 
   console.log(`✅ Clip: ${localPath}\n`);
@@ -226,21 +262,28 @@ export async function generateVideoFromImage({
     videoConfig.enhancePrompt = true;
   }
 
-  let operation = await client.models.generateVideos({
-    model,
-    prompt,
-    image: {
-      imageBytes: image.imageBytes,
-      mimeType: image.mimeType,
-    },
-    config: videoConfig,
+  let operation = await withVeoRetry("Veo image-to-video", async () => {
+    let op = await client.models.generateVideos({
+      model,
+      prompt,
+      image: {
+        imageBytes: image.imageBytes,
+        mimeType: image.mimeType,
+      },
+      config: videoConfig,
+    });
+    op = await waitForVideoOperation(client, op);
+    return op;
   });
 
-  operation = await waitForVideoOperation(client, operation);
   const gcsUri = extractGcsUriFromOperation(operation);
 
-  const localName = outputFileName || `veo-img-${timestampSlug()}.mp4`;
-  const localPath = path.join(config.outputDir, localName);
+  const localPath = resolveLocalOutputPath(
+    config.outputDir,
+    outputFileName,
+    `veo-img-${timestampSlug()}.mp4`,
+  );
+  await ensureOutputDir(path.dirname(localPath));
   await downloadFromGcs(gcsUri, localPath);
 
   console.log(`✅ Clip: ${localPath}\n`);

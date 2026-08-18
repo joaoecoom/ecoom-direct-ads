@@ -226,6 +226,16 @@ body {
   color: #fecaca;
 }
 
+.pipeline-hint {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+  padding: 0.85rem 1.1rem;
+}
+
+.pipeline-hint p {
+  margin: 0;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
