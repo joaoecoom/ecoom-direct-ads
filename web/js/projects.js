@@ -3,6 +3,8 @@ import {
   apiDeleteProject,
   apiDuplicateProject,
   apiUpdateProject,
+  fetchHealth,
+  fetchProject,
   fetchProjects,
 } from "./api.js";
 
@@ -54,17 +56,70 @@ function setCache(projects) {
   saveLocal(projects);
 }
 
-/** Bootstrap: API first, localStorage fallback */
+/** Bootstrap: API first, localStorage fallback only when API is down */
 export async function initProjects() {
   try {
+    await fetchHealth();
+    apiEnabled = true;
     const data = await fetchProjects();
     setCache(data.projects || []);
-    apiEnabled = true;
   } catch {
     cache = loadLocal();
     apiEnabled = false;
   }
   return cache;
+}
+
+/** Re-detect API after offline boot */
+export async function ensureApiEnabled() {
+  if (apiEnabled) return true;
+  try {
+    await fetchHealth();
+    apiEnabled = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Garante que o projecto existe no servidor antes de jobs (copy, vídeo, etc.).
+ * Se só existir localmente, cria-o na API e actualiza o cache.
+ */
+export async function ensureProjectOnServer(projectId) {
+  await ensureApiEnabled();
+  if (!apiEnabled) {
+    throw new Error("API indisponível — não é possível gerar sem servidor.");
+  }
+
+  const remote = await fetchProject(projectId);
+  if (remote) {
+    const idx = cache.findIndex((p) => p.id === projectId);
+    if (idx >= 0) cache[idx] = remote;
+    else cache.unshift(remote);
+    saveLocal(cache);
+    return remote;
+  }
+
+  const local = getProject(projectId);
+  if (!local) {
+    throw new Error("Projecto não encontrado — actualiza a página ou cria um novo.");
+  }
+
+  let created = await apiCreateProject({
+    name: local.name,
+    masterPrompt: local.masterPrompt,
+    settings: local.settings,
+  });
+
+  if (local.latestCopy) {
+    created = await apiUpdateProject(created.id, { latestCopy: local.latestCopy });
+  }
+
+  cache = cache.filter((p) => p.id !== projectId);
+  cache.unshift(created);
+  saveLocal(cache);
+  return created;
 }
 
 export function calcSceneCount(totalSeconds, clipDurationSeconds, maxScenes = 150) {
@@ -85,6 +140,8 @@ export function getProject(id) {
 }
 
 export async function createProject(name, masterPrompt = "") {
+  await ensureApiEnabled();
+
   const payload = {
     name: name.trim() || "Untitled Project",
     masterPrompt: masterPrompt.trim(),

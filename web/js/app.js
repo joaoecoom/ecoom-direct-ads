@@ -539,6 +539,14 @@ async function boot() {
 boot();
 setInterval(checkApiStatus, 60000);
 
+window.addEventListener("ecoom:project-synced", (e) => {
+  const id = e.detail?.projectId;
+  if (id) {
+    currentProjectId = id;
+    navigate("project", id);
+  }
+});
+
 window.addEventListener("ecoom:switch-tab", (e) => {
   const tab = e.detail?.tab;
   if (tab && currentProjectId) switchWorkspaceTab(tab);

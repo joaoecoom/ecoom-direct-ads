@@ -15,7 +15,7 @@ import {
 } from "./brief-wizard.js";
 import { formatCopyForDisplay, wizardToSettings } from "./prompt-template.js";
 import { trackJob, stopJobTracking } from "./job-activity.js";
-import { getProject, linkJobToProject, updateProject } from "./projects.js";
+import { getProject, ensureProjectOnServer, linkJobToProject, updateProject } from "./projects.js";
 
 let config = null;
 let activeProjectId = null;
@@ -196,6 +196,17 @@ function getBrief() {
   return (els.briefPreview?.value || getBuiltBrief()).trim();
 }
 
+async function resolveActiveProject() {
+  const project = await ensureProjectOnServer(activeProjectId);
+  if (project.id !== activeProjectId) {
+    activeProjectId = project.id;
+    window.dispatchEvent(
+      new CustomEvent("ecoom:project-synced", { detail: { projectId: project.id } }),
+    );
+  }
+  return project;
+}
+
 async function onGenerateCopy() {
   hideError();
   const brief = getBrief();
@@ -215,9 +226,10 @@ async function onGenerateCopy() {
   els.genCopyBtn.textContent = "A gerar copy…";
 
   try {
+    const project = await resolveActiveProject();
     const wizard = getWizardState();
     const settings = wizardToSettings(wizard, config);
-    const data = await generateCopy(activeProjectId, {
+    const data = await generateCopy(project.id, {
       offer: brief,
       overrides: settings,
       wizard,
@@ -280,11 +292,12 @@ async function onGenerateVideo() {
   els.copyBlock?.classList.add("hidden");
 
   try {
+    const project = await resolveActiveProject();
     const wizard = getWizardState();
     const settings = wizardToSettings(wizard, config);
     const data = await createJob({
       offer: brief,
-      projectId: activeProjectId,
+      projectId: project.id,
       approvedCopy: copy,
       wizard,
       ...settings,

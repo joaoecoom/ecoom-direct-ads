@@ -7,7 +7,7 @@ import {
   uploadAsset,
 } from "./api.js";
 import { trackJob, stopJobTracking } from "./job-activity.js";
-import { getProject, initProjects } from "./projects.js";
+import { ensureProjectOnServer, getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
 let activeProjectId = null;
