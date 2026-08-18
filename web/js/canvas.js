@@ -15,7 +15,7 @@ const state = {
   selectedAssetId: null,
   assetFilter: "all",
   cachedAssets: [],
-  mode: "video",
+  mode: "ads",
   frameSlot: "inicial",
   inicialAssetId: null,
   finalAssetId: null,
@@ -68,6 +68,10 @@ function bindCanvasEvents() {
   document.getElementById("canvas-composer")?.addEventListener("submit", (e) => {
     e.preventDefault();
     void onComposerSubmit();
+  });
+
+  document.getElementById("canvas-open-engine")?.addEventListener("click", () => {
+    revealAdEngine();
   });
 
   document.getElementById("canvas-attach-btn")?.addEventListener("click", (e) => {
@@ -209,6 +213,7 @@ function syncComposerUi() {
 
   const countEl = document.getElementById("canvas-count-wrap");
   countEl?.classList.toggle("hidden", state.mode !== "image");
+  document.getElementById("canvas-open-engine")?.classList.toggle("hidden", state.mode !== "ads");
 
   const modeLabel = document.getElementById("canvas-mode-label");
   const selected = state.cachedAssets.find((a) => a.id === state.selectedAssetId);
@@ -419,11 +424,17 @@ async function startAdFromCanvas(prompt, selected) {
         detail: { projectId: activeProjectId, prompt, assetId: selected?.id || null },
       }),
     );
-    window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "create" } }));
-    setCanvasStatus("Anúncio aberto — revê o brief e gera copy.");
+    revealAdEngine();
+    setCanvasStatus("Motor Ecoom aberto — revê o brief e gera copy.");
   } catch (err) {
     setCanvasStatus(err.message);
   }
+}
+
+export function revealAdEngine() {
+  const engine = document.getElementById("ad-engine");
+  engine?.classList.remove("hidden");
+  engine?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 export function destroyCanvas() {

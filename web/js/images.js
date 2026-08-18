@@ -246,10 +246,10 @@ function renderPipelineHint(project) {
   hint.classList.remove("hidden");
   if (!hasCopy) {
     hint.innerHTML =
-      '<p class="muted">Passo 1: no <strong>Create Ad</strong>, gera a copy. Para tudo automático, usa <strong>Gerar Vídeo Completo</strong>.</p>';
+      '<p class="muted">Passo 1: no <strong>Ads</strong>, gera a copy. Para tudo automático, usa <strong>Gerar Vídeo Completo</strong>.</p>';
   } else if (!hasBlueprint) {
     hint.innerHTML =
-      '<p class="muted">Copy pronta ✓ — <strong>Generate All Images</strong> cria o blueprint e as imagens. Ou no Create Ad: <strong>Gerar Vídeo Completo</strong>.</p>';
+      '<p class="muted">Copy pronta ✓ — <strong>Generate All Images</strong> cria o blueprint e as imagens. Ou no Ads: <strong>Gerar Vídeo Completo</strong>.</p>';
   } else {
     hint.innerHTML =
       '<p class="muted">Blueprint pronto ✓ — clica <strong>Generate All Images</strong>. Para vídeo final: tab Videos ou <strong>Gerar Vídeo Completo</strong>.</p>';
@@ -260,12 +260,12 @@ function defaultImagesStatus(project) {
   const hasBlueprint = Boolean(project?.blueprintPath);
   const hasCopy = Boolean(project?.latestCopy || project?.activeCreative?.copy);
   if (!hasCopy) {
-    return "Gera copy no Create Ad — ou usa «Gerar Vídeo Completo» para o fluxo completo.";
+    return "Gera copy no Ads — ou usa «Gerar Vídeo Completo» para o fluxo completo.";
   }
   if (!hasBlueprint) {
     return "Copy pronta — «Generate All Images» cria blueprint + imagens automaticamente.";
   }
-  return "Blueprint pronto — gera imagens ou usa «Gerar Vídeo Completo» no Create Ad.";
+  return "Blueprint pronto — gera imagens ou usa «Gerar Vídeo Completo» no Ads.";
 }
 
 function setImagesStatus(msg) {
@@ -396,7 +396,7 @@ export async function renderImagesPanel(projectId) {
   if (!scenes.length) {
     grid.innerHTML = `
       <div class="empty-state card">
-        <p class="muted">Gera copy no <strong>Create Ad</strong>, depois clica <strong>Generate All Images</strong> (blueprint + imagens).</p>
+        <p class="muted">Gera copy no <strong>Ads</strong>, depois clica <strong>Generate All Images</strong> (blueprint + imagens).</p>
         <p class="muted">Ou usa <strong>Gerar Vídeo Completo</strong> para copy → imagens → vídeo → export num só fluxo.</p>
       </div>`;
     return;
@@ -497,7 +497,7 @@ async function onGenerateAllImages() {
 
     if (!hasCopy && !hasBlueprint) {
       throw new Error(
-        "Gera copy primeiro (Create Ad) ou usa «Gerar Vídeo Completo» para o fluxo completo.",
+        "Gera copy primeiro (Ads) ou usa «Gerar Vídeo Completo» para o fluxo completo.",
       );
     }
 

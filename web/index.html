@@ -132,108 +132,18 @@
             <div id="canvas-empty" class="canvas-empty">
               <div class="canvas-empty-icon" aria-hidden="true">✿</div>
               <p>Comece a criar ou adicione arquivos</p>
-              <p class="muted">Arrasta imagens e vídeos para aqui.</p>
+              <p class="muted">Arrasta imagens e vídeos. Gera imagem, vídeo ou o anúncio completo daqui.</p>
             </div>
             <div id="canvas-grid" class="assets-grid canvas-grid hidden"></div>
             <p id="canvas-status" class="canvas-status muted"></p>
-            <form id="canvas-composer" class="canvas-composer">
-              <div class="canvas-composer-modes">
-                <button type="button" class="canvas-mode" data-canvas-mode="image">Imagem</button>
-                <button type="button" class="canvas-mode active" data-canvas-mode="video">Vídeo</button>
-                <button type="button" class="canvas-mode" data-canvas-mode="ads">Ads</button>
-              </div>
-              <div class="canvas-frames">
-                <button type="button" class="canvas-frame-btn active" data-canvas-frame="inicial">Inicial</button>
-                <span class="canvas-frame-arrow">↔</span>
-                <button type="button" class="canvas-frame-btn" data-canvas-frame="final">Final</button>
-              </div>
-              <div id="canvas-refs" class="canvas-refs"></div>
-              <div class="canvas-prompt-row">
-                <div class="canvas-attach-wrap">
-                  <button type="button" class="canvas-attach-btn" id="canvas-attach-btn" title="Adicionar cara, embalagem, roupa…">+</button>
-                  <div id="canvas-ref-menu" class="canvas-ref-menu hidden">
-                    <p class="muted">Adicionar referência</p>
-                    <button type="button" data-ref-role="face">Cara / identidade</button>
-                    <button type="button" data-ref-role="product">Embalagem / produto</button>
-                    <button type="button" data-ref-role="clothing">Roupa</button>
-                    <button type="button" data-ref-role="other">Outro</button>
-                    <label class="canvas-ref-upload">
-                      Upload imagem
-                      <input type="file" id="canvas-ref-upload" accept="image/*" hidden />
-                    </label>
-                  </div>
+            <section id="ad-engine" class="ad-engine hidden">
+              <div class="ad-engine-head">
+                <div>
+                  <p class="eyebrow">Motor Ecoom</p>
+                  <h3>Copy → cenas → vídeo final</h3>
+                  <p class="muted">Estás a criar um ad. Os assets e referências de cima entram no pipeline.</p>
                 </div>
-                <input
-                  type="text"
-                  id="canvas-prompt"
-                  placeholder="O que queres criar?"
-                  autocomplete="off"
-                />
               </div>
-              <div class="canvas-composer-row">
-                <span id="canvas-mode-label" class="muted">Vídeo · a partir de prompt</span>
-                <span id="canvas-count-wrap" class="hidden">
-                  <select id="canvas-count" aria-label="Quantidade">
-                    <option value="1">x1</option>
-                    <option value="2">x2</option>
-                    <option value="4">x4</option>
-                  </select>
-                </span>
-                <button type="submit" class="canvas-send" title="Gerar">→</button>
-              </div>
-            </form>
-          </div>
-
-          <div id="panel-assets" class="workspace-panel hidden">
-            <div class="images-toolbar card">
-              <div>
-                <h2>Project Assets</h2>
-                <p id="assets-status" class="muted">Imagens, vídeos, referências e personagens — reutilizáveis em todo o projecto.</p>
-              </div>
-              <div class="images-actions">
-                <label class="btn sm upload-label">
-                  + Imagem
-                  <input type="file" id="assets-upload-input" accept="image/*" multiple hidden />
-                </label>
-                <label class="btn sm upload-label">
-                  + Vídeo
-                  <input type="file" id="assets-upload-video-input" accept="video/*" hidden />
-                </label>
-              </div>
-            </div>
-            <div id="assets-notice" class="card pipeline-hint hidden"></div>
-            <div id="assets-dropzone" class="assets-dropzone card hidden">
-              <div class="assets-dropzone-inner">
-                <strong>Solta ficheiros aqui</strong>
-                <p class="muted">Imagens e vídeos — entram no projecto antes de gerar o ad.</p>
-              </div>
-            </div>
-            <div class="assets-workspace">
-              <nav id="assets-filter-nav" class="assets-filter-nav card" aria-label="Filtrar assets">
-                <button type="button" class="assets-filter active" data-assets-filter="all">Todas</button>
-                <button type="button" class="assets-filter" data-assets-filter="image">Imagens</button>
-                <button type="button" class="assets-filter" data-assets-filter="video">Vídeos</button>
-                <button type="button" class="assets-filter" data-assets-filter="character">Personagens</button>
-              </nav>
-              <div class="assets-layout">
-                <div id="assets-grid" class="assets-grid"></div>
-                <aside id="asset-actions-panel" class="asset-actions-panel card">
-                  <p class="muted">Selecciona um asset para ver acções.</p>
-                </aside>
-              </div>
-            </div>
-          </div>
-
-          <div id="panel-create" class="workspace-panel create-workspace hidden">
-            <div class="create-hero card">
-              <p class="eyebrow">Creative Brief</p>
-              <h2>O que queres criar?</h2>
-              <p class="muted">
-                Pipeline Ecoom: copy, cenas, imagens e vídeo final.
-                Ou volta a <strong>Images / Videos</strong> para trabalhar assets sem fazer um anúncio.
-              </p>
-            </div>
-
             <form id="create-ad-form" class="card create-form">
               <div id="wizard-section">
                 <div id="brief-wizard-root"></div>
@@ -300,15 +210,98 @@
               </div>
               <div id="blueprint-scenes" class="blueprint-scenes"></div>
             </div>
+            </section>
+            <form id="canvas-composer" class="canvas-composer">
+              <div class="canvas-composer-modes">
+                <button type="button" class="canvas-mode active" data-canvas-mode="ads">Ads</button>
+                <button type="button" class="canvas-mode" data-canvas-mode="image">Imagem</button>
+                <button type="button" class="canvas-mode" data-canvas-mode="video">Vídeo</button>
+              </div>
+              <div class="canvas-frames">
+                <button type="button" class="canvas-frame-btn active" data-canvas-frame="inicial">Inicial</button>
+                <span class="canvas-frame-arrow">↔</span>
+                <button type="button" class="canvas-frame-btn" data-canvas-frame="final">Final</button>
+              </div>
+              <div id="canvas-refs" class="canvas-refs"></div>
+              <div class="canvas-prompt-row">
+                <div class="canvas-attach-wrap">
+                  <button type="button" class="canvas-attach-btn" id="canvas-attach-btn" title="Adicionar cara, embalagem, roupa…">+</button>
+                  <div id="canvas-ref-menu" class="canvas-ref-menu hidden">
+                    <p class="muted">Adicionar referência</p>
+                    <button type="button" data-ref-role="face">Cara / identidade</button>
+                    <button type="button" data-ref-role="product">Embalagem / produto</button>
+                    <button type="button" data-ref-role="clothing">Roupa</button>
+                    <button type="button" data-ref-role="other">Outro</button>
+                    <label class="canvas-ref-upload">
+                      Upload imagem
+                      <input type="file" id="canvas-ref-upload" accept="image/*" hidden />
+                    </label>
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  id="canvas-prompt"
+                  placeholder="O que queres criar?"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="canvas-composer-row">
+                <span id="canvas-mode-label" class="muted">Ads · só prompt</span>
+                <button type="button" class="btn ghost sm" id="canvas-open-engine">Brief Ecoom</button>
+                <span id="canvas-count-wrap" class="hidden">
+                  <select id="canvas-count" aria-label="Quantidade">
+                    <option value="1">x1</option>
+                    <option value="2">x2</option>
+                    <option value="4">x4</option>
+                  </select>
+                </span>
+                <button type="submit" class="canvas-send" title="Gerar">→</button>
+              </div>
+            </form>
 
-            <div class="roadmap card muted-box">
-              <strong>Fluxo recomendado</strong>
-              <p class="muted">
-                1) Brief (perguntas) → 2) <strong>Gerar Copy</strong> → revê → 3)
-                <strong>Gerar Vídeo</strong> ou tab Images → Blueprint → imagens → animate.
-              </p>
+          </div>
+
+          <div id="panel-assets" class="workspace-panel hidden">
+            <div class="images-toolbar card">
+              <div>
+                <h2>Project Assets</h2>
+                <p id="assets-status" class="muted">Imagens, vídeos, referências e personagens — reutilizáveis em todo o projecto.</p>
+              </div>
+              <div class="images-actions">
+                <label class="btn sm upload-label">
+                  + Imagem
+                  <input type="file" id="assets-upload-input" accept="image/*" multiple hidden />
+                </label>
+                <label class="btn sm upload-label">
+                  + Vídeo
+                  <input type="file" id="assets-upload-video-input" accept="video/*" hidden />
+                </label>
+              </div>
+            </div>
+            <div id="assets-notice" class="card pipeline-hint hidden"></div>
+            <div id="assets-dropzone" class="assets-dropzone card hidden">
+              <div class="assets-dropzone-inner">
+                <strong>Solta ficheiros aqui</strong>
+                <p class="muted">Imagens e vídeos — entram no projecto antes de gerar o ad.</p>
+              </div>
+            </div>
+            <div class="assets-workspace">
+              <nav id="assets-filter-nav" class="assets-filter-nav card" aria-label="Filtrar assets">
+                <button type="button" class="assets-filter active" data-assets-filter="all">Todas</button>
+                <button type="button" class="assets-filter" data-assets-filter="image">Imagens</button>
+                <button type="button" class="assets-filter" data-assets-filter="video">Vídeos</button>
+                <button type="button" class="assets-filter" data-assets-filter="character">Personagens</button>
+              </nav>
+              <div class="assets-layout">
+                <div id="assets-grid" class="assets-grid"></div>
+                <aside id="asset-actions-panel" class="asset-actions-panel card">
+                  <p class="muted">Selecciona um asset para ver acções.</p>
+                </aside>
+              </div>
             </div>
           </div>
+
+          <div id="panel-create" class="workspace-panel hidden" hidden></div>
 
           <div id="panel-images" class="workspace-panel hidden">
             <section class="studio-section card">

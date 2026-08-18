@@ -9,7 +9,7 @@ import {
   updateProject,
 } from "./projects.js";
 import { destroyCreateAd, initCreateAd, refreshCreateAdForm } from "./create-ad.js";
-import { destroyCanvas, initCanvas, renderCanvas } from "./canvas.js";
+import { destroyCanvas, initCanvas, renderCanvas, revealAdEngine } from "./canvas.js";
 import { destroyImagesTab, initImagesTab, renderImagesPanel } from "./images.js";
 import { destroyVideosTab, initVideosTab, renderVideosPanel } from "./videos.js";
 import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./timeline.js";
@@ -252,7 +252,7 @@ function renderProjectWorkspace(id) {
 
   if (!entryRoutedProjects.has(id)) {
     entryRoutedProjects.add(id);
-    activeWorkspaceTab = forceEntryTab === "create" ? "create" : "canvas";
+    activeWorkspaceTab = "canvas";
     forceEntryTab = null;
   }
 
@@ -265,6 +265,7 @@ function renderProjectWorkspace(id) {
 }
 
 function switchWorkspaceTab(tab) {
+  if (tab === "create" || tab === "studio") tab = "canvas";
   activeWorkspaceTab = tab;
   document.querySelectorAll(".workspace-panel").forEach((p) => p.classList.add("hidden"));
   document.getElementById(`panel-${tab}`)?.classList.remove("hidden");
@@ -285,6 +286,8 @@ function switchWorkspaceTab(tab) {
     } else {
       void renderCanvas(currentProjectId);
     }
+    const project = getProject(currentProjectId);
+    if (project?.masterPrompt || project?.latestCopy) revealAdEngine();
   }
 
   if (tab === "assets" && currentProjectId) {
@@ -433,10 +436,9 @@ function renderProjectTabs(id) {
   const exportReady = project?.latestExport?.assetId ? 1 : 0;
 
   tabsEl.innerHTML = `
-    <button type="button" class="tab" data-tab="canvas">Studio</button>
+    <button type="button" class="tab" data-tab="canvas">Ads</button>
     <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab" data-tab="videos">Videos</button>
-    <button type="button" class="tab" data-tab="create">Ads</button>
     <button type="button" class="tab" data-tab="timeline">Timeline</button>
     <button type="button" class="tab" data-tab="export">Export${exportReady ? " ✓" : ""}</button>
     <span class="tab-meta">${videoCount} vídeo(s) · ${escapeHtml(activeTitle)} · ${videosReady} clips</span>`;
@@ -726,7 +728,13 @@ window.addEventListener("ecoom:project-synced", (e) => {
 
 window.addEventListener("ecoom:switch-tab", (e) => {
   const tab = e.detail?.tab;
-  if (tab && currentProjectId) switchWorkspaceTab(tab);
+  if (!tab || !currentProjectId) return;
+  if (tab === "create") {
+    switchWorkspaceTab("canvas");
+    revealAdEngine();
+    return;
+  }
+  switchWorkspaceTab(tab);
 });
 
 window.addEventListener("ecoom:seed-ad", async (e) => {
