@@ -5,6 +5,7 @@ import {
   fetchJobCopy,
   jobVideoUrl,
 } from "./api.js";
+import { trackJob, stopJobTracking } from "./job-activity.js";
 import {
   calcSceneCount,
   calcTotalDuration,
@@ -17,6 +18,7 @@ import {
 let pollTimer = null;
 let config = null;
 let activeProjectId = null;
+let maxSceneCount = 150;
 
 const els = {};
 
@@ -71,6 +73,7 @@ function bindEvents() {
   els.totalDuration?.addEventListener("change", onTotalDurationChange);
   els.customDuration?.addEventListener("input", syncSceneFromTotal);
   els.scenes?.addEventListener("change", onScenesManualChange);
+  els.scenes?.addEventListener("input", onScenesManualChange);
   els.offer?.addEventListener(
     "blur",
     () => {
@@ -114,31 +117,39 @@ function getTotalSeconds() {
   return Number.parseInt(els.totalDuration.value, 10);
 }
 
+function clampScenesInput(n) {
+  const max = maxSceneCount;
+  const min = config?.sceneCountRange?.min || 1;
+  return Math.max(min, Math.min(max, Number.parseInt(String(n), 10) || min));
+}
+
 function syncSceneFromTotal() {
   const clip = Number.parseInt(els.duration.value, 10) || 8;
   const total = getTotalSeconds();
-  const maxScenes = config?.sceneCounts?.length
-    ? Math.max(...config.sceneCounts)
-    : 5;
-  const suggested = calcSceneCount(total, clip, maxScenes);
+  const suggested = calcSceneCount(total, clip, maxSceneCount);
   els.scenes.value = String(suggested);
-  updateSceneHint(total, clip, suggested, maxScenes);
+  if (els.scenes.max !== String(maxSceneCount)) {
+    els.scenes.max = String(maxSceneCount);
+    els.scenes.min = "1";
+  }
+  updateSceneHint(total, clip, suggested);
   persistSettings();
 }
 
 function onScenesManualChange() {
   const clip = Number.parseInt(els.duration.value, 10) || 8;
-  const scenes = Number.parseInt(els.scenes.value, 10) || 1;
+  const scenes = clampScenesInput(els.scenes.value);
+  els.scenes.value = String(scenes);
   const total = calcTotalDuration(scenes, clip);
-  els.sceneHint.textContent = `Total estimado: ~${total}s (${scenes} × ${clip}s)`;
+  els.sceneHint.textContent = `Total estimado: ~${total}s (${scenes} × ${clip}s) · máx. ${maxSceneCount} cenas`;
   persistSettings();
 }
 
-function updateSceneHint(total, clip, suggested, maxScenes) {
+function updateSceneHint(total, clip, suggested) {
   const ideal = Math.ceil(total / clip);
   let hint = `Total alvo: ${total}s → ${suggested} cenas (${clip}s cada)`;
-  if (ideal > maxScenes) {
-    hint += ` · Máx. ${maxScenes} cenas no MVP (Fase 4+: até 30+)`;
+  if (ideal > maxSceneCount) {
+    hint += ` · Limite actual: ${maxSceneCount} cenas (${maxSceneCount * clip}s)`;
   }
   els.sceneHint.textContent = hint;
 }
@@ -151,7 +162,7 @@ function persistSettings() {
       languageVariant: els.variant.value,
       aspectRatio: els.format.value,
       clipDurationSeconds: Number(els.duration.value),
-      sceneCount: Number(els.scenes.value),
+      sceneCount: clampScenesInput(els.scenes.value),
       totalDurationSeconds: getTotalSeconds(),
       resolution: els.resolution.value,
       tone: els.tone.value,
@@ -173,7 +184,7 @@ export function refreshCreateAdForm(projectId) {
   if (s.languageVariant) els.variant.value = s.languageVariant;
   if (s.aspectRatio) els.format.value = s.aspectRatio;
   if (s.clipDurationSeconds) els.duration.value = String(s.clipDurationSeconds);
-  if (s.sceneCount) els.scenes.value = String(s.sceneCount);
+  if (s.sceneCount) els.scenes.value = String(clampScenesInput(s.sceneCount));
   if (s.resolution) els.resolution.value = s.resolution;
   if (s.tone && els.tone) els.tone.value = s.tone;
   if (s.style && els.style) els.style.value = s.style;
@@ -189,10 +200,18 @@ export function refreshCreateAdForm(projectId) {
 async function loadConfig() {
   try {
     config = await fetchConfig();
+    maxSceneCount =
+      config.features?.maxSceneCount ||
+      config.sceneCountRange?.max ||
+      150;
+
+    if (els.scenes) {
+      els.scenes.max = String(maxSceneCount);
+      els.scenes.min = "1";
+    }
 
     fillSelect(els.language, config.languages, (l) => l.id, (l) => l.label);
     fillSelect(els.format, config.aspectRatios, (a) => a.id, (a) => a.label);
-    fillSelect(els.scenes, config.sceneCounts, (n) => n, (n) => `${n} cenas`);
     fillSelect(els.duration, config.clipDurations, (n) => n, (n) => `${n}s`);
     fillSelect(
       els.resolution,
@@ -245,40 +264,6 @@ function setJobUI(job) {
   }
 }
 
-function startPolling(jobId) {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    const job = await fetchJob(jobId);
-    if (!job) return;
-    setJobUI(job);
-    if (job.status === "completed") {
-      clearInterval(pollTimer);
-      els.resultVideo.src = `${jobVideoUrl(jobId)}?t=${Date.now()}`;
-      els.videoWrap.classList.remove("hidden");
-      const copy = await fetchJobCopy(jobId);
-      if (copy) {
-        els.copyBlock.textContent = copy.voiceover || JSON.stringify(copy, null, 2);
-        els.copyHeading.classList.remove("hidden");
-        els.copyBlock.classList.remove("hidden");
-      }
-      els.submitBtn.disabled = false;
-      els.submitBtn.textContent = "Generate Creative";
-      if (activeProjectId) {
-        window.dispatchEvent(
-          new CustomEvent("ecoom:job-complete", {
-            detail: { projectId: activeProjectId, jobId },
-          }),
-        );
-      }
-    }
-    if (job.status === "failed") {
-      clearInterval(pollTimer);
-      els.submitBtn.disabled = false;
-      els.submitBtn.textContent = "Generate Creative";
-    }
-  }, 3000);
-}
-
 async function onSubmit(e) {
   e.preventDefault();
   hideError();
@@ -307,7 +292,7 @@ async function onSubmit(e) {
       language: els.language.value,
       languageVariant: els.variant.value,
       aspectRatio: els.format.value,
-      sceneCount: Number(els.scenes.value),
+      sceneCount: clampScenesInput(els.scenes.value),
       clipDurationSeconds: Number(els.duration.value),
       resolution: els.resolution.value,
       tone: els.tone.value,
@@ -322,8 +307,38 @@ async function onSubmit(e) {
       progress: { message: "Na fila..." },
     };
     setJobUI(job);
-    startPolling(data.jobId);
     els.submitBtn.textContent = "A gerar...";
+
+    trackJob(data.jobId, {
+      jobType: "full_ad",
+      pollMs: 1000,
+      onUpdate: setJobUI,
+      onComplete: async (completedJob) => {
+        setJobUI(completedJob);
+        els.resultVideo.src = `${jobVideoUrl(data.jobId)}?t=${Date.now()}`;
+        els.videoWrap.classList.remove("hidden");
+        const copy = await fetchJobCopy(data.jobId);
+        if (copy) {
+          els.copyBlock.textContent = copy.voiceover || JSON.stringify(copy, null, 2);
+          els.copyHeading.classList.remove("hidden");
+          els.copyBlock.classList.remove("hidden");
+        }
+        els.submitBtn.disabled = false;
+        els.submitBtn.textContent = "Generate Creative";
+        if (activeProjectId) {
+          window.dispatchEvent(
+            new CustomEvent("ecoom:job-complete", {
+              detail: { projectId: activeProjectId, jobId: data.jobId },
+            }),
+          );
+        }
+      },
+      onFailed: (failedJob) => {
+        setJobUI(failedJob);
+        els.submitBtn.disabled = false;
+        els.submitBtn.textContent = "Generate Creative";
+      },
+    });
   } catch (err) {
     showError(err.message || "Erro desconhecido");
     els.submitBtn.disabled = false;
@@ -333,4 +348,5 @@ async function onSubmit(e) {
 
 export function destroyCreateAd() {
   if (pollTimer) clearInterval(pollTimer);
+  stopJobTracking();
 }

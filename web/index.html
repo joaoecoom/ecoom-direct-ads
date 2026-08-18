@@ -75,6 +75,20 @@
 
           <div id="workspace-tabs" class="workspace-tabs"></div>
 
+          <div id="workspace-job-activity" class="workspace-job-activity card hidden">
+            <div class="job-activity-head">
+              <span id="ws-job-dot" class="dot running"></span>
+              <div class="job-activity-title">
+                <strong id="ws-job-title">Processo</strong>
+                <div id="ws-job-message" class="muted">A aguardar…</div>
+              </div>
+              <span id="ws-job-progress-label" class="job-progress-label muted"></span>
+            </div>
+            <div class="job-progress-track"><div id="ws-job-progress-bar" class="job-progress-bar"></div></div>
+            <div id="ws-job-steps" class="job-steps"></div>
+            <div id="ws-job-log" class="job-log"></div>
+          </div>
+
           <div id="panel-create" class="workspace-panel create-workspace">
             <div class="create-hero card">
               <p class="eyebrow">Master Creative Prompt</p>
@@ -111,7 +125,7 @@
                     </div>
                     <div>
                       <label for="scenes">Cenas</label>
-                      <select id="scenes"></select>
+                      <input type="number" id="scenes" min="1" max="150" value="3" />
                     </div>
                     <div class="full-width">
                       <p id="scene-hint" class="hint"></p>
@@ -160,6 +174,7 @@
                   <div id="job-message" class="muted"></div>
                 </div>
               </div>
+              <p class="muted job-panel-hint">Actividade em tempo real no painel acima ↑</p>
               <div id="video-wrap" class="video-wrap hidden">
                 <video id="result-video" controls playsinline></video>
               </div>

@@ -10,10 +10,12 @@ import {
   AD_CLIP_DURATIONS,
   AD_LANGUAGES,
   AD_RESOLUTIONS,
-  AD_SCENE_COUNTS,
   AD_STYLES,
   AD_TONES,
   LANGUAGE_VARIANTS,
+  MAX_SCENE_COUNT,
+  MAX_TOTAL_DURATION_SECONDS,
+  MIN_SCENE_COUNT,
 } from "../src/lib/ad-config.js";
 import { createJob, getJob, listJobs, updateJob } from "./job-store.js";
 import {
@@ -71,7 +73,8 @@ app.get("/api/config", (_req, res) => {
     languageVariants: LANGUAGE_VARIANTS,
     aspectRatios: AD_ASPECT_RATIOS,
     clipDurations: AD_CLIP_DURATIONS,
-    sceneCounts: AD_SCENE_COUNTS,
+    sceneCountRange: { min: MIN_SCENE_COUNT, max: MAX_SCENE_COUNT },
+    maxTotalDurationSeconds: MAX_TOTAL_DURATION_SECONDS,
     resolutions: AD_RESOLUTIONS,
     tones: AD_TONES,
     styles: AD_STYLES,
@@ -82,7 +85,8 @@ app.get("/api/config", (_req, res) => {
       timeline: true,
       sceneEditor: true,
       export: true,
-      maxSceneCount: Math.max(...AD_SCENE_COUNTS),
+      liveProgress: true,
+      maxSceneCount: MAX_SCENE_COUNT,
     },
   });
 });

@@ -2,9 +2,9 @@ import {
   assetFileUrl,
   animateAllVideos,
   animateSceneVideo,
-  fetchJob,
   fetchProjectAssets,
 } from "./api.js";
+import { trackJob, stopJobTracking } from "./job-activity.js";
 import { getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
@@ -165,18 +165,16 @@ function startJobPoll(jobId, sceneTotal = 1, label = "Animate All") {
   if (pollTimer) clearInterval(pollTimer);
   document.getElementById("videos-progress")?.classList.remove("hidden");
 
-  pollTimer = setInterval(async () => {
-    const job = await fetchJob(jobId);
-    if (!job) return;
-
-    const idx = job.progress?.sceneIndex || 0;
-    const total = job.progress?.sceneTotal || sceneTotal;
-    if (idx && total) setVideosProgress(idx, total);
-
-    setVideosStatus(job.progress?.message || `${label}: ${job.status}`);
-
-    if (job.status === "completed") {
-      clearInterval(pollTimer);
+  trackJob(jobId, {
+    jobType: sceneTotal > 1 ? "videos" : "scene_video",
+    pollMs: 1000,
+    onUpdate: (job) => {
+      const idx = job.progress?.sceneIndex || 0;
+      const total = job.progress?.sceneTotal || sceneTotal;
+      if (idx && total) setVideosProgress(idx, total);
+      setVideosStatus(job.progress?.message || `${label}: ${job.status}`);
+    },
+    onComplete: async () => {
       document.getElementById("btn-animate-all")?.removeAttribute("disabled");
       await initProjects();
       await renderVideosPanel(activeProjectId);
@@ -186,15 +184,15 @@ function startJobPoll(jobId, sceneTotal = 1, label = "Animate All") {
           detail: { projectId: activeProjectId, jobId },
         }),
       );
-    }
-    if (job.status === "failed") {
-      clearInterval(pollTimer);
+    },
+    onFailed: (job) => {
       showVideosError(job.error || "Animação falhou");
       document.getElementById("btn-animate-all")?.removeAttribute("disabled");
-    }
-  }, 4000);
+    },
+  });
 }
 
 export function destroyVideosTab() {
   if (pollTimer) clearInterval(pollTimer);
+  stopJobTracking();
 }

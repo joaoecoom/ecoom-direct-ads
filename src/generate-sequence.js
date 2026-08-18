@@ -18,6 +18,7 @@ export const ROOT = path.resolve(__dirname, "..");
 export async function runSequence(spec) {
   const scenes = spec.scenes;
   const flow = spec.flow === true;
+  const onProgress = spec.onProgress;
   const crossfadeSeconds =
     spec.crossfadeSeconds ??
     Number.parseFloat(process.env.VIDEO_CROSSFADE_SECONDS || "0.35");
@@ -71,6 +72,14 @@ export async function runSequence(spec) {
       );
 
     console.log(`--- [${i + 1}/${scenes.length}] ${id}${flow && lastFramePath ? " (flow→)" : ""} ---`);
+
+    onProgress?.({
+      step: "video",
+      sceneIndex: i + 1,
+      sceneTotal: scenes.length,
+      sceneId: id,
+      message: `Veo ${i + 1}/${scenes.length} — ${id}`,
+    });
 
     const clip = await generateVideoFromImage({
       imagePath,

@@ -1,12 +1,12 @@
 import {
   assetFileUrl,
-  fetchJob,
   fetchProjectAssets,
   generateAllImages,
   generateBlueprint,
   regenerateSceneImage,
   uploadAsset,
 } from "./api.js";
+import { trackJob, stopJobTracking } from "./job-activity.js";
 import { getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
@@ -125,7 +125,7 @@ async function onGenerateBlueprint() {
     const data = await generateBlueprint(activeProjectId, {
       offer: project?.masterPrompt,
     });
-    startJobPoll(data.jobId, "Blueprint");
+    startJobPoll(data.jobId, "Blueprint", "blueprint");
   } catch (err) {
     showImagesError(err.message);
     btn.disabled = false;
@@ -154,7 +154,7 @@ async function onRegenerateScene(sceneId) {
   setImagesStatus(`A regenerar ${sceneId}...`);
   try {
     const data = await regenerateSceneImage(activeProjectId, sceneId);
-    startJobPoll(data.jobId, sceneId);
+    startJobPoll(data.jobId, sceneId, "scene_image");
   } catch (err) {
     showImagesError(err.message);
   }
@@ -194,15 +194,19 @@ function fileToBase64(file) {
   });
 }
 
-function startJobPoll(jobId, label) {
+function startJobPoll(jobId, label, jobType = "images") {
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    const job = await fetchJob(jobId);
-    if (!job) return;
-    setImagesStatus(`${label}: ${job.progress?.message || job.status}`);
-
-    if (job.status === "completed") {
-      clearInterval(pollTimer);
+  trackJob(jobId, {
+    jobType,
+    pollMs: 1000,
+    onUpdate: (job) => {
+      const scene =
+        job.progress?.sceneIndex && job.progress?.sceneTotal
+          ? ` (${job.progress.sceneIndex}/${job.progress.sceneTotal})`
+          : "";
+      setImagesStatus(`${label}${scene}: ${job.progress?.message || job.status}`);
+    },
+    onComplete: async () => {
       document.getElementById("btn-gen-blueprint")?.removeAttribute("disabled");
       document.getElementById("btn-gen-all-images")?.removeAttribute("disabled");
       await initProjects();
@@ -213,14 +217,13 @@ function startJobPoll(jobId, label) {
           detail: { projectId: activeProjectId, jobId },
         }),
       );
-    }
-    if (job.status === "failed") {
-      clearInterval(pollTimer);
+    },
+    onFailed: (job) => {
       showImagesError(job.error || "Job falhou");
       document.getElementById("btn-gen-blueprint")?.removeAttribute("disabled");
       document.getElementById("btn-gen-all-images")?.removeAttribute("disabled");
-    }
-  }, 3000);
+    },
+  });
 }
 
 function escapeHtml(str) {
@@ -232,4 +235,5 @@ function escapeHtml(str) {
 
 export function destroyImagesTab() {
   if (pollTimer) clearInterval(pollTimer);
+  stopJobTracking();
 }

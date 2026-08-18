@@ -147,6 +147,12 @@ export async function runAdGeneration({
     outputFileName: path.basename(silentPath),
     storyboard,
     scenes: sequenceScenes,
+    onProgress: (update) =>
+      progress("video", update.message, {
+        sceneIndex: update.sceneIndex,
+        sceneTotal: update.sceneTotal,
+        sceneId: update.sceneId,
+      }),
   });
 
   let finalVideo = manifest.finalVideo;

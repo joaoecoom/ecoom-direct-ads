@@ -1,9 +1,9 @@
 import {
   assetFileUrl,
-  fetchJob,
   fetchProjectExports,
   rebuildTimeline,
 } from "./api.js";
+import { trackJob, stopJobTracking } from "./job-activity.js";
 import { getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
@@ -248,13 +248,11 @@ async function onRebuildExport() {
 
 function startJobPoll(jobId) {
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    const job = await fetchJob(jobId);
-    if (!job) return;
-    setExportStatus(job.progress?.message || job.status);
-
-    if (job.status === "completed") {
-      clearInterval(pollTimer);
+  trackJob(jobId, {
+    jobType: "rebuild",
+    pollMs: 1000,
+    onUpdate: (job) => setExportStatus(job.progress?.message || job.status),
+    onComplete: async () => {
       document.getElementById("btn-export-rebuild")?.removeAttribute("disabled");
       await initProjects();
       await renderExportPanel(activeProjectId);
@@ -264,14 +262,12 @@ function startJobPoll(jobId) {
           detail: { projectId: activeProjectId, jobId },
         }),
       );
-    }
-
-    if (job.status === "failed") {
-      clearInterval(pollTimer);
+    },
+    onFailed: (job) => {
       showExportError(job.error || "Rebuild falhou");
       document.getElementById("btn-export-rebuild")?.removeAttribute("disabled");
-    }
-  }, 2000);
+    },
+  });
 }
 
 async function onCopyExportText() {
@@ -287,4 +283,5 @@ async function onCopyExportText() {
 
 export function destroyExportTab() {
   if (pollTimer) clearInterval(pollTimer);
+  stopJobTracking();
 }

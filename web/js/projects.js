@@ -67,7 +67,7 @@ export async function initProjects() {
   return cache;
 }
 
-export function calcSceneCount(totalSeconds, clipDurationSeconds, maxScenes = 5) {
+export function calcSceneCount(totalSeconds, clipDurationSeconds, maxScenes = 150) {
   const n = Math.ceil(totalSeconds / clipDurationSeconds);
   return Math.max(1, Math.min(maxScenes, n));
 }

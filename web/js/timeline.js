@@ -1,7 +1,6 @@
 import {
   activateSceneVersion,
   assetFileUrl,
-  fetchJob,
   fetchProjectScene,
   fetchProjectTimeline,
   patchProjectScene,
@@ -9,6 +8,7 @@ import {
   regenerateSceneImage,
   regenerateSceneVideo,
 } from "./api.js";
+import { trackJob, stopJobTracking } from "./job-activity.js";
 import { getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
@@ -330,13 +330,11 @@ async function onRebuildFinal() {
 
 function startJobPoll(jobId, kind = "rebuild") {
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    const job = await fetchJob(jobId);
-    if (!job) return;
-    setTimelineStatus(job.progress?.message || job.status);
-
-    if (job.status === "completed") {
-      clearInterval(pollTimer);
+  trackJob(jobId, {
+    jobType: kind === "image" ? "scene_image" : kind === "video" ? "scene_video" : "rebuild",
+    pollMs: 1000,
+    onUpdate: (job) => setTimelineStatus(job.progress?.message || job.status),
+    onComplete: async () => {
       document.getElementById("btn-rebuild-final")?.removeAttribute("disabled");
       sceneEditorCache = null;
       await initProjects();
@@ -353,15 +351,15 @@ function startJobPoll(jobId, kind = "rebuild") {
           detail: { projectId: activeProjectId, jobId },
         }),
       );
-    }
-    if (job.status === "failed") {
-      clearInterval(pollTimer);
+    },
+    onFailed: (job) => {
       showTimelineError(job.error || "Job falhou");
       document.getElementById("btn-rebuild-final")?.removeAttribute("disabled");
-    }
-  }, 2000);
+    },
+  });
 }
 
 export function destroyTimelineTab() {
   if (pollTimer) clearInterval(pollTimer);
+  stopJobTracking();
 }

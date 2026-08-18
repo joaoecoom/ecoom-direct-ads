@@ -17,12 +17,43 @@ export const AD_ASPECT_RATIOS = [
 
 export const AD_CLIP_DURATIONS = [4, 6, 8, 10];
 
+/** Duração total máxima (custom UI) — 10 min */
+export const MAX_TOTAL_DURATION_SECONDS = Number.parseInt(
+  process.env.AD_MAX_TOTAL_SECONDS || "600",
+  10,
+);
+
+export const MIN_SCENE_COUNT = 1;
+
+/** Máx. cenas = duração total / clip mais curto (ex.: 600s ÷ 4s = 150) */
+export const MAX_SCENE_COUNT = Number.parseInt(
+  process.env.AD_MAX_SCENE_COUNT ||
+    String(Math.ceil(MAX_TOTAL_DURATION_SECONDS / Math.min(...AD_CLIP_DURATIONS))),
+  10,
+);
+
+/** @deprecated use sceneCountRange — mantido para compat */
+export const AD_SCENE_COUNTS = Array.from(
+  { length: Math.min(MAX_SCENE_COUNT, 30) },
+  (_, i) => i + 1,
+);
+
 export const AD_RESOLUTIONS = [
   { id: "720p", label: "720p (rápido)" },
   { id: "1080p", label: "1080p (premium)" },
 ];
 
-export const AD_SCENE_COUNTS = [1, 2, 3, 4, 5];
+export function clampSceneCount(n, max = MAX_SCENE_COUNT) {
+  const value = Number.parseInt(String(n), 10);
+  if (Number.isNaN(value)) return MIN_SCENE_COUNT;
+  return Math.max(MIN_SCENE_COUNT, Math.min(max, value));
+}
+
+export function sceneCountFromDuration(totalSeconds, clipDurationSeconds, max = MAX_SCENE_COUNT) {
+  const clip = normalizeClipDuration(clipDurationSeconds);
+  const total = Number.parseInt(String(totalSeconds), 10) || clip;
+  return clampSceneCount(Math.ceil(total / clip), max);
+}
 
 export const AD_TONES = [
   { id: "urgente", label: "Urgente / directo" },
@@ -131,9 +162,9 @@ export function resolveAdConfig(overrides = {}) {
     );
   }
 
-  if (!AD_SCENE_COUNTS.includes(config.sceneCount)) {
+  if (config.sceneCount < MIN_SCENE_COUNT || config.sceneCount > MAX_SCENE_COUNT) {
     throw new Error(
-      `Número de cenas inválido: ${config.sceneCount}. Opções: ${AD_SCENE_COUNTS.join(", ")}`,
+      `Número de cenas inválido: ${config.sceneCount}. Use ${MIN_SCENE_COUNT}–${MAX_SCENE_COUNT}.`,
     );
   }
 
