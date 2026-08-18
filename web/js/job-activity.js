@@ -11,6 +11,9 @@ const PIPELINE_BY_TYPE = {
   scene_video: ["queued", "video", "done"],
   rebuild: ["queued", "rebuild", "done"],
   variations: ["queued", "image", "done"],
+  standalone_image: ["queued", "image", "done"],
+  standalone_video: ["queued", "video", "done"],
+  asset_video: ["queued", "video", "done"],
 };
 
 const STEP_LABELS = {

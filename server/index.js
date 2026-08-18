@@ -331,6 +331,70 @@ app.post("/api/projects/:id/assets/:assetId/variations", async (req, res) => {
   res.status(202).json({ jobId: id, status: "queued", type: "variations", count });
 });
 
+app.post("/api/projects/:id/assets/generate-image", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const prompt = String(req.body?.prompt || "").trim();
+  if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
+  const count = Math.min(Math.max(1, Number(req.body?.count) || 1), 12);
+  const id = randomUUID().slice(0, 8);
+
+  await createJob({
+    id,
+    type: "standalone_image",
+    request: { type: "standalone_image", projectId: req.params.id, prompt, count },
+  });
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "standalone_image", count });
+});
+
+app.post("/api/projects/:id/assets/generate-video", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const prompt = String(req.body?.prompt || "").trim();
+  if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
+  const id = randomUUID().slice(0, 8);
+
+  await createJob({
+    id,
+    type: "standalone_video",
+    request: { type: "standalone_video", projectId: req.params.id, prompt },
+  });
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "standalone_video" });
+});
+
+app.post("/api/projects/:id/assets/:assetId/animate", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const source = await getAsset(req.params.assetId);
+  if (!source || source.projectId !== req.params.id) {
+    return res.status(404).json({ error: "Asset não encontrado neste projecto" });
+  }
+  if (source.type !== "image") {
+    return res.status(400).json({ error: "Animar só a partir de imagens" });
+  }
+
+  const prompt = String(req.body?.prompt || "").trim();
+  const id = randomUUID().slice(0, 8);
+
+  await createJob({
+    id,
+    type: "asset_video",
+    request: {
+      type: "asset_video",
+      projectId: req.params.id,
+      sourceAssetId: req.params.assetId,
+      prompt,
+    },
+  });
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "asset_video" });
+});
+
 app.get("/api/characters", async (_req, res) => {
   const projects = await listProjects();
   const characters = [];

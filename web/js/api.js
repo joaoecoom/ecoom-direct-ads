@@ -176,6 +176,42 @@ export async function generateAssetVariations(projectId, assetId, body = {}) {
   return data;
 }
 
+export async function generateStandaloneImage(projectId, body = {}) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/assets/generate-image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Geração de imagem falhou");
+  return data;
+}
+
+export async function generateStandaloneVideo(projectId, body = {}) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/assets/generate-video`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Geração de vídeo falhou");
+  return data;
+}
+
+export async function animateAsset(projectId, assetId, body = {}) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/assets/${assetId}/animate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Animar falhou");
+  return data;
+}
+
 export async function generateBlueprint(projectId, body = {}) {
   const res = await fetch(`${API_URL}/api/projects/${projectId}/blueprint`, {
     method: "POST",

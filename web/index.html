@@ -152,13 +152,13 @@
             </div>
           </div>
 
-          <div id="panel-create" class="workspace-panel create-workspace">
+          <div id="panel-create" class="workspace-panel create-workspace hidden">
             <div class="create-hero card">
               <p class="eyebrow">Creative Brief</p>
               <h2>O que queres criar?</h2>
               <p class="muted">
-                Responde às perguntas — a IA escreve a copy, planea cenas, imagens e vídeo.
-                Vídeo ~15s demora 5–15 min (Veo). O progresso avança por etapa: blueprint → imagens → vídeo → export.
+                Pipeline Ecoom: copy, cenas, imagens e vídeo final.
+                Ou volta a <strong>Images / Videos</strong> para trabalhar assets sem fazer um anúncio.
               </p>
             </div>
 
@@ -258,6 +258,22 @@
                 </div>
               </div>
               <div id="images-studio-notice" class="card pipeline-hint hidden"></div>
+              <form id="images-generate-bar" class="studio-generate-bar">
+                <input
+                  type="text"
+                  id="images-generate-prompt"
+                  placeholder="Prompt — Nano Banana Pro gera a imagem neste projecto"
+                  autocomplete="off"
+                />
+                <select id="images-generate-count" aria-label="Quantidade">
+                  <option value="1">x1</option>
+                  <option value="2">x2</option>
+                  <option value="4">x4</option>
+                  <option value="8">x8</option>
+                </select>
+                <button type="submit" class="btn primary sm">Gerar imagem</button>
+                <button type="button" class="btn sm" id="images-goto-ads">Gerar anúncio</button>
+              </form>
               <div id="images-dropzone" class="assets-dropzone card hidden">
                 <div class="assets-dropzone-inner">
                   <strong>Solta ficheiros aqui</strong>
@@ -280,7 +296,7 @@
               </div>
             </section>
 
-            <section class="studio-section studio-pipeline">
+            <section id="images-pipeline-section" class="studio-section studio-pipeline">
             <div class="images-toolbar card">
               <div>
                 <p class="eyebrow">Pipeline Ecoom</p>
@@ -350,6 +366,16 @@
                 </div>
               </div>
               <div id="videos-studio-notice" class="card pipeline-hint hidden"></div>
+              <form id="videos-generate-bar" class="studio-generate-bar">
+                <input
+                  type="text"
+                  id="videos-generate-prompt"
+                  placeholder="Prompt Veo — ou selecciona uma imagem e anima"
+                  autocomplete="off"
+                />
+                <button type="submit" class="btn primary sm">Gerar vídeo</button>
+                <button type="button" class="btn sm" id="videos-goto-ads">Gerar anúncio</button>
+              </form>
               <div id="videos-dropzone" class="assets-dropzone card hidden">
                 <div class="assets-dropzone-inner">
                   <strong>Solta ficheiros aqui</strong>
@@ -371,7 +397,7 @@
               </div>
             </section>
 
-            <section class="studio-section studio-pipeline">
+            <section id="videos-pipeline-section" class="studio-section studio-pipeline">
             <div class="images-toolbar card">
               <div>
                 <p class="eyebrow">Pipeline Ecoom</p>
@@ -526,7 +552,7 @@
         <div id="new-project-step-pick" class="new-project-step">
           <p class="eyebrow">Create a new project</p>
           <h2>Como queres começar?</h2>
-          <p class="muted sp-intro">Escolhe o ponto de entrada — todos convergem para a mesma pipeline Ecoom.</p>
+          <p class="muted sp-intro">Studio primeiro: upload, gerar imagem ou vídeo. O anúncio é uma opção — não o único caminho.</p>
           <div id="starting-point-grid" class="starting-point-grid"></div>
           <div class="modal-actions sp-modal-actions">
             <button type="button" class="btn ghost" id="modal-cancel">Cancelar</button>

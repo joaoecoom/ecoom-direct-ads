@@ -4,6 +4,8 @@ import { getStartingPoint } from "./starting-point.js";
 import {
   bindAssetStudioInteractions,
   createAssetStudioState,
+  generateStudioImages,
+  generateStudioVideo,
   handleAssetAction,
   ingestDroppedFiles,
   renderAssetActionsPanel,
@@ -122,19 +124,17 @@ function showGeneratePrompt(kind) {
       : "Pessoa a falar para câmara, UGC autêntico, 9:16...");
 
   const prompt = window.prompt(
-    kind === "image" ? "Prompt para gerar imagem:" : "Prompt para gerar vídeo (Veo):",
+    kind === "image" ? "Prompt para Nano Banana Pro:" : "Prompt para Veo:",
     defaultText,
   );
   if (!prompt?.trim()) return;
 
-  setAssetsStatus(
-    kind === "image"
-      ? "Geração de imagem — usa tab Images ou Create Ad."
-      : "Geração de vídeo — tab Videos ou Create Ad → Gerar Vídeo Completo.",
-  );
-  showAssetsNotice(
-    `Prompt guardado. Próximo passo: ${kind === "image" ? "tab Images" : "tab Create Ad / Videos"}.`,
-  );
+  const cb = studioCallbacks();
+  if (kind === "image") {
+    void generateStudioImages(activeProjectId, { prompt: prompt.trim(), count: 1 }, cb);
+  } else {
+    void generateStudioVideo(activeProjectId, { prompt: prompt.trim() }, cb);
+  }
 }
 
 function setAssetsStatus(msg) {

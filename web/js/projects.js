@@ -145,7 +145,7 @@ export async function createProject(name, masterPrompt = "", options = {}) {
   const payload = {
     name: name.trim() || "Untitled Project",
     masterPrompt: masterPrompt.trim(),
-    startingPoint: options.startingPoint || "prompt",
+    startingPoint: options.startingPoint || "upload",
     entryPrompt: options.entryPrompt?.trim() || "",
   };
 

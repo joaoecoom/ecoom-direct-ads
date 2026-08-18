@@ -1,7 +1,10 @@
 import {
   addProjectReference,
   assetFileUrl,
+  animateAsset,
   generateAssetVariations,
+  generateStandaloneImage,
+  generateStandaloneVideo,
   setProjectAvatar,
   uploadAsset,
 } from "./api.js";
@@ -276,15 +279,79 @@ export async function handleAssetAction(action, ctx) {
       }
       break;
     }
-    case "animate":
-      window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "videos" } }));
+    case "animate": {
+      const asset = cachedAssets.find((a) => a.id === selectedAssetId);
+      if (asset?.type === "video") {
+        onError?.("Já é um vídeo — selecciona uma imagem para animar.");
+        break;
+      }
+      const motion = window.prompt(
+        "Prompt de movimento (Veo) — opcional:",
+        asset?.prompt || "Natural handheld UGC, subtle motion, preserve identity",
+      );
+      onStatus?.("Veo — a animar imagem…");
+      try {
+        const data = await animateAsset(projectId, selectedAssetId, {
+          prompt: motion || "",
+        });
+        await waitForJob(data.jobId, {
+          jobType: "asset_video",
+          onUpdate: (job) => onStatus?.(job.progress?.message || job.status),
+        });
+        await initProjects();
+        onComplete?.();
+        onStatus?.("Vídeo gerado — aparece no studio.");
+      } catch (err) {
+        onError?.(err.message);
+      }
       break;
+    }
     case "build-ad":
     case "create-from":
       window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "create" } }));
       break;
     default:
       break;
+  }
+}
+
+export async function generateStudioImages(projectId, { prompt, count }, callbacks = {}) {
+  const { onStatus, onError, onComplete } = callbacks;
+  onStatus?.(`Nano Banana Pro — a gerar ${count > 1 ? count + " imagens" : "imagem"}…`);
+  try {
+    const data = await generateStandaloneImage(projectId, { prompt, count });
+    await waitForJob(data.jobId, {
+      jobType: "standalone_image",
+      onUpdate: (job) => {
+        const scene =
+          job.progress?.sceneIndex && job.progress?.sceneTotal
+            ? ` (${job.progress.sceneIndex}/${job.progress.sceneTotal})`
+            : "";
+        onStatus?.(`${job.progress?.message || job.status}${scene}`);
+      },
+    });
+    await initProjects();
+    onComplete?.();
+    onStatus?.("Imagem(ns) pronta(s) no projecto.");
+  } catch (err) {
+    onError?.(err.message);
+  }
+}
+
+export async function generateStudioVideo(projectId, { prompt }, callbacks = {}) {
+  const { onStatus, onError, onComplete } = callbacks;
+  onStatus?.("Veo — a gerar vídeo…");
+  try {
+    const data = await generateStandaloneVideo(projectId, { prompt });
+    await waitForJob(data.jobId, {
+      jobType: "standalone_video",
+      onUpdate: (job) => onStatus?.(job.progress?.message || job.status),
+    });
+    await initProjects();
+    onComplete?.();
+    onStatus?.("Vídeo pronto no projecto.");
+  } catch (err) {
+    onError?.(err.message);
   }
 }
 

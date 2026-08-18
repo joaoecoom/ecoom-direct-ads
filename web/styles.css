@@ -1931,6 +1931,34 @@ video {
   margin-bottom: 0.75rem;
 }
 
+.studio-generate-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.studio-generate-bar input[type="text"] {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--surface-2, #111);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font: inherit;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+}
+
+.studio-generate-bar select {
+  background: var(--surface-2, #111);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-xs);
+}
+
 .assets-workspace {
   display: grid;
   grid-template-columns: 160px 1fr;

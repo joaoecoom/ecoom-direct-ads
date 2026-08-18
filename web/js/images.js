@@ -10,6 +10,7 @@ import {
 import {
   bindAssetStudioInteractions,
   createAssetStudioState,
+  generateStudioImages,
   handleAssetAction,
   ingestDroppedFiles,
   renderAssetActionsPanel,
@@ -44,6 +45,19 @@ function bindImageEvents() {
 
   document.getElementById("images-studio-upload-input")?.addEventListener("change", onStudioUploadImages);
   document.getElementById("images-studio-upload-video-input")?.addEventListener("change", onStudioUploadVideos);
+
+  document.getElementById("images-generate-bar")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    void onGenerateStudioImage();
+  });
+  document.getElementById("images-goto-ads")?.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "create" } }));
+  });
+
+  window.addEventListener("ecoom:starting-point", (e) => {
+    if (e.detail?.projectId !== activeProjectId) return;
+    void applyStartingPointAction(e.detail.action);
+  });
 
   bindAssetStudioInteractions(panel, assetState, {
     filterNavId: "images-filter-nav",
@@ -83,6 +97,41 @@ function showImagesStudioNotice(msg) {
 
 function hideImagesStudioNotice() {
   document.getElementById("images-studio-notice")?.classList.add("hidden");
+}
+
+async function onGenerateStudioImage() {
+  const prompt = document.getElementById("images-generate-prompt")?.value?.trim();
+  const count = Number(document.getElementById("images-generate-count")?.value || 1);
+  if (!prompt) {
+    showImagesStudioNotice("Escreve um prompt para gerar a imagem.");
+    document.getElementById("images-generate-prompt")?.focus();
+    return;
+  }
+  hideImagesStudioNotice();
+  await generateStudioImages(activeProjectId, { prompt, count }, imagesStudioCallbacks());
+}
+
+async function applyStartingPointAction(action) {
+  const project = getProject(activeProjectId);
+  const promptEl = document.getElementById("images-generate-prompt");
+  if (project?.entryPrompt && promptEl && !promptEl.value) {
+    promptEl.value = project.entryPrompt;
+  }
+
+  switch (action) {
+    case "image":
+      document.getElementById("images-studio-upload-input")?.click();
+      break;
+    case "upload":
+      document.getElementById("images-generate-prompt")?.focus();
+      break;
+    case "generate-image":
+      promptEl?.focus();
+      if (project?.entryPrompt) void onGenerateStudioImage();
+      break;
+    default:
+      break;
+  }
 }
 
 function imagesStudioCallbacks() {
@@ -311,6 +360,9 @@ export async function renderImagesPanel(projectId) {
   }
 
   renderProjectAssetsSection(project, assets);
+
+  const pipelineEl = document.getElementById("images-pipeline-section");
+  pipelineEl?.classList.toggle("hidden", !scenes.length);
 
   const hasBlueprint = Boolean(project?.blueprintPath);
   const hasCopy = Boolean(project?.latestCopy || project?.activeCreative?.copy);

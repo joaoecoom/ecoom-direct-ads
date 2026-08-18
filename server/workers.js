@@ -27,6 +27,8 @@ import { shouldUseUgcFlow } from "../src/lib/ugc-flow.js";
 import { resolveSceneVideoPath } from "./timeline.js";
 import { syncGenerationAssetsToProject } from "./project-sync.js";
 import { generateAssetVariations } from "../src/lib/asset-variations.js";
+import { generateImage } from "../src/lib/imagen.js";
+import { generateVideoFromImage, generateVideoFromText } from "../src/lib/veo-client.js";
 
 export function loadStoryboardForProject(project, creativeId = null) {
   const creative = resolveCreative(project, creativeId);
@@ -51,6 +53,9 @@ export async function runJob(job, onProgress) {
   if (type === "scene_video") return runSceneVideoJob(job, onProgress);
   if (type === "rebuild") return runRebuildJob(job, onProgress);
   if (type === "variations") return runVariationsJob(job, onProgress);
+  if (type === "standalone_image") return runStandaloneImageJob(job, onProgress);
+  if (type === "standalone_video") return runStandaloneVideoJob(job, onProgress);
+  if (type === "asset_video") return runAssetVideoJob(job, onProgress);
   return runFullAdJob(job, onProgress);
 }
 
@@ -650,6 +655,143 @@ async function runVariationsJob(job, onProgress) {
   }
 
   return { assetIds, variationCount: assetIds.length, sourceAssetId };
+}
+
+async function runStandaloneImageJob(job, onProgress) {
+  const { projectId, prompt, count } = job.request;
+  if (!projectId || !String(prompt || "").trim()) {
+    throw new Error("projectId e prompt obrigatórios");
+  }
+
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const adConfig = resolveAdConfig(project.settings || {});
+  const n = Math.min(Math.max(1, Number(count) || 1), 12);
+  const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `gen-${job.id}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const assetIds = [];
+  for (let i = 0; i < n; i++) {
+    onProgress?.({
+      step: "image",
+      message: `Nano Banana Pro — imagem ${i + 1}/${n}`,
+      sceneIndex: i + 1,
+      sceneTotal: n,
+    });
+    const outputPath = path.join(outputDir, `image-${String(i + 1).padStart(2, "0")}.png`);
+    await generateImage({
+      prompt: String(prompt).trim(),
+      outputPath,
+      aspectRatio: adConfig.aspectRatio || "9:16",
+      ugc: true,
+    });
+    const asset = await createAsset({
+      projectId,
+      type: "image",
+      source: "generated",
+      prompt: String(prompt).trim(),
+      sourcePath: outputPath,
+      ext: "png",
+      metadata: { jobId: job.id, order: i + 1, role: "studio" },
+    });
+    assetIds.push(asset.id);
+    await addProjectAssetId(projectId, asset.id);
+  }
+
+  return { assetIds, count: assetIds.length };
+}
+
+async function runStandaloneVideoJob(job, onProgress) {
+  const { projectId, prompt } = job.request;
+  if (!projectId || !String(prompt || "").trim()) {
+    throw new Error("projectId e prompt obrigatórios");
+  }
+
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const adConfig = resolveAdConfig(project.settings || {});
+  const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `veo-${job.id}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const outputFileName = path.join(outputDir, "clip.mp4");
+
+  onProgress?.({ step: "video", message: "Veo — a gerar vídeo a partir do prompt…" });
+
+  const clip = await generateVideoFromText({
+    prompt: String(prompt).trim(),
+    aspectRatio: adConfig.aspectRatio || "9:16",
+    durationSeconds: adConfig.clipDurationSeconds || 8,
+    resolution: adConfig.resolution,
+    outputFileName,
+    runLabel: `studio-video/${job.id}`,
+  });
+
+  const asset = await createAsset({
+    projectId,
+    type: "video",
+    source: "generated",
+    prompt: String(prompt).trim(),
+    sourcePath: clip.localPath,
+    ext: "mp4",
+    metadata: { jobId: job.id, role: "studio", type: "text-to-video" },
+  });
+  await addProjectAssetId(projectId, asset.id);
+  return { assetId: asset.id, videoAssetIds: [asset.id] };
+}
+
+async function runAssetVideoJob(job, onProgress) {
+  const { projectId, sourceAssetId, prompt } = job.request;
+  if (!projectId || !sourceAssetId) {
+    throw new Error("projectId e sourceAssetId obrigatórios");
+  }
+
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+
+  const source = await getAsset(sourceAssetId);
+  if (!source || source.type !== "image") {
+    throw new Error("Selecciona uma imagem para animar");
+  }
+
+  const adConfig = resolveAdConfig(project.settings || {});
+  const imagePath = resolveAssetFile(source);
+  const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `animate-${job.id}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const outputFileName = path.join(outputDir, "clip.mp4");
+  const motion =
+    String(prompt || "").trim() ||
+    source.prompt ||
+    "Natural handheld camera, authentic UGC, person moving naturally, preserve identity.";
+
+  onProgress?.({ step: "video", message: "Veo — a animar imagem…" });
+
+  const clip = await generateVideoFromImage({
+    imagePath,
+    prompt: motion,
+    aspectRatio: adConfig.aspectRatio || "9:16",
+    durationSeconds: adConfig.clipDurationSeconds || 8,
+    resolution: adConfig.resolution,
+    outputFileName,
+    runLabel: `studio-animate/${job.id}`,
+  });
+
+  const asset = await createAsset({
+    projectId,
+    type: "video",
+    source: "generated",
+    prompt: motion,
+    sourcePath: clip.localPath,
+    ext: "mp4",
+    metadata: {
+      jobId: job.id,
+      role: "studio",
+      type: "image-to-video",
+      sourceAssetId,
+    },
+  });
+  await addProjectAssetId(projectId, asset.id);
+  return { assetId: asset.id, videoAssetIds: [asset.id], sourceAssetId };
 }
 
 export async function persistJobProgress(jobId, update) {

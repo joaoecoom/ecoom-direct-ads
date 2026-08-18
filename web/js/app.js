@@ -45,7 +45,8 @@ const spStepDetails = document.getElementById("new-project-step-details");
 const startingPointGrid = document.getElementById("starting-point-grid");
 const apiStatusEl = document.getElementById("api-status");
 
-let selectedStartingPoint = "prompt";
+let selectedStartingPoint = "upload";
+let forceEntryTab = null;
 let assetsTabInitialized = false;
 let assetsTabProjectId = null;
 
@@ -59,7 +60,7 @@ let timelineTabInitialized = false;
 let timelineTabProjectId = null;
 let exportTabInitialized = false;
 let exportTabProjectId = null;
-let activeWorkspaceTab = "create";
+let activeWorkspaceTab = "images";
 const entryRoutedProjects = new Set();
 
 function parseRoute() {
@@ -209,8 +210,8 @@ function renderProjectWorkspace(id) {
   document.getElementById("project-subtitle").textContent =
     project.masterPrompt?.slice(0, 120) ||
     (project.startingPoint && project.startingPoint !== "prompt"
-      ? `Entrada: ${getStartingPoint(project.startingPoint).titlePt}`
-      : "Define o Master Creative Prompt abaixo");
+      ? `Studio · ${getStartingPoint(project.startingPoint).titlePt}`
+      : "Upload, gera imagens (Nano Banana) ou vídeos (Veo) — o anúncio é opcional.");
 
   if (imagesTabProjectId !== id) {
     imagesTabInitialized = false;
@@ -243,22 +244,29 @@ function renderProjectWorkspace(id) {
   renderProjectTabs(id);
   initCreativesRail(id);
 
-  const route = getEntryRoute(project.startingPoint || "prompt");
+  const route = getEntryRoute(project.startingPoint || "upload");
   if (!entryRoutedProjects.has(id)) {
-    activeWorkspaceTab = route.tab;
     entryRoutedProjects.add(id);
-    queueMicrotask(() => {
-      window.dispatchEvent(
-        new CustomEvent("ecoom:starting-point", {
-          detail: {
-            projectId: id,
-            startingPoint: project.startingPoint || "prompt",
-            action: route.action,
-            tab: route.tab,
-          },
-        }),
-      );
-    });
+    if (forceEntryTab) {
+      activeWorkspaceTab = forceEntryTab;
+      forceEntryTab = null;
+    } else {
+      activeWorkspaceTab = route.tab === "create" ? "images" : route.tab;
+    }
+    if (route.action) {
+      queueMicrotask(() => {
+        window.dispatchEvent(
+          new CustomEvent("ecoom:starting-point", {
+            detail: {
+              projectId: id,
+              startingPoint: project.startingPoint || "upload",
+              action: route.action,
+              tab: activeWorkspaceTab,
+            },
+          }),
+        );
+      });
+    }
   }
 
   switchWorkspaceTab(activeWorkspaceTab);
@@ -421,10 +429,10 @@ function renderProjectTabs(id) {
   const exportReady = project?.latestExport?.assetId ? 1 : 0;
 
   tabsEl.innerHTML = `
-    <button type="button" class="tab" data-tab="assets">Assets</button>
-    <button type="button" class="tab" data-tab="create">Create Ad</button>
     <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab" data-tab="videos">Videos</button>
+    <button type="button" class="tab" data-tab="assets">Assets</button>
+    <button type="button" class="tab" data-tab="create">Ads</button>
     <button type="button" class="tab" data-tab="timeline">Timeline</button>
     <button type="button" class="tab" data-tab="export">Export${exportReady ? " ✓" : ""}</button>
     <span class="tab-meta">${videoCount} vídeo(s) · ${escapeHtml(activeTitle)} · ${videosReady} clips</span>`;
@@ -506,7 +514,7 @@ async function handleInProjectStartingPoint(startingPoint) {
 }
 
 function openNewProjectModal() {
-  selectedStartingPoint = "prompt";
+  selectedStartingPoint = "upload";
   renderStartingPointPicker();
   spStepPick?.classList.remove("hidden");
   spStepDetails?.classList.add("hidden");
@@ -559,7 +567,7 @@ function closeNewProjectModal() {
   newProjectForm?.reset();
   spStepPick?.classList.remove("hidden");
   spStepDetails?.classList.add("hidden");
-  selectedStartingPoint = "prompt";
+  selectedStartingPoint = "upload";
 }
 
 async function checkApiStatus() {
@@ -617,7 +625,8 @@ newProjectForm?.addEventListener("submit", async (e) => {
   }
 
   closeNewProjectModal();
-  activeWorkspaceTab = getEntryRoute(selectedStartingPoint).tab;
+  forceEntryTab = getEntryRoute(selectedStartingPoint).tab;
+  activeWorkspaceTab = forceEntryTab;
   navigate("project", project.id);
 });
 

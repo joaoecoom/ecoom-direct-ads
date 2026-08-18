@@ -7,6 +7,7 @@ import {
 import {
   bindAssetStudioInteractions,
   createAssetStudioState,
+  generateStudioVideo,
   handleAssetAction,
   ingestDroppedFiles,
   renderAssetActionsPanel,
@@ -35,6 +36,19 @@ function bindVideoEvents() {
   document.getElementById("btn-animate-all")?.addEventListener("click", onAnimateAll);
   document.getElementById("videos-studio-upload-input")?.addEventListener("change", onStudioUploadImages);
   document.getElementById("videos-studio-upload-video-input")?.addEventListener("change", onStudioUploadVideos);
+
+  document.getElementById("videos-generate-bar")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    void onGenerateStudioVideo();
+  });
+  document.getElementById("videos-goto-ads")?.addEventListener("click", () => {
+    window.dispatchEvent(new CustomEvent("ecoom:switch-tab", { detail: { tab: "create" } }));
+  });
+
+  window.addEventListener("ecoom:starting-point", (e) => {
+    if (e.detail?.projectId !== activeProjectId) return;
+    void applyStartingPointAction(e.detail.action);
+  });
 
   bindAssetStudioInteractions(panel, assetState, {
     filterNavId: "videos-filter-nav",
@@ -72,6 +86,37 @@ function showVideosStudioNotice(msg) {
 
 function hideVideosStudioNotice() {
   document.getElementById("videos-studio-notice")?.classList.add("hidden");
+}
+
+async function onGenerateStudioVideo() {
+  const prompt = document.getElementById("videos-generate-prompt")?.value?.trim();
+  if (!prompt) {
+    showVideosStudioNotice("Escreve um prompt Veo, ou selecciona uma imagem e usa Animar.");
+    document.getElementById("videos-generate-prompt")?.focus();
+    return;
+  }
+  hideVideosStudioNotice();
+  await generateStudioVideo(activeProjectId, { prompt }, videosStudioCallbacks());
+}
+
+async function applyStartingPointAction(action) {
+  const project = getProject(activeProjectId);
+  const promptEl = document.getElementById("videos-generate-prompt");
+  if (project?.entryPrompt && promptEl && !promptEl.value) {
+    promptEl.value = project.entryPrompt;
+  }
+
+  switch (action) {
+    case "video":
+      document.getElementById("videos-studio-upload-video-input")?.click();
+      break;
+    case "generate-video":
+      promptEl?.focus();
+      if (project?.entryPrompt) void onGenerateStudioVideo();
+      break;
+    default:
+      break;
+  }
 }
 
 function videosStudioCallbacks() {
@@ -205,6 +250,9 @@ export async function renderVideosPanel(projectId) {
   }
 
   renderProjectAssetsSection(project, assets);
+
+  const pipelineEl = document.getElementById("videos-pipeline-section");
+  pipelineEl?.classList.toggle("hidden", !scenes.length);
 
   const assetById = Object.fromEntries(assets.map((a) => [a.id, a]));
   const imagesReady = scenes.filter((s) => s.imageAssetId).length;

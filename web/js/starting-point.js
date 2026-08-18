@@ -1,48 +1,48 @@
-/** Creative Starting Point — entry modes that converge on the same Ecoom pipeline. */
+/** Creative Starting Point — studio first, ads as an option. */
 
 export const STARTING_POINTS = [
   {
-    id: "prompt",
-    title: "Start from Prompt",
-    titlePt: "Começar com Prompt",
-    desc: "Descreve o anúncio — copy, blueprint, imagens e vídeo.",
-    icon: "✦",
+    id: "upload",
+    title: "Upload Assets",
+    titlePt: "Upload imagens / vídeos",
+    desc: "Arrasta fotos e clips para o projecto. Depois geras, animas ou fazes um ad.",
+    icon: "⇪",
     featured: true,
   },
   {
     id: "image",
     title: "Start from Image",
-    titlePt: "Começar com Imagem",
-    desc: "Upload de expert, produto, UGC ou referência visual.",
+    titlePt: "Começar com imagem",
+    desc: "Upload de pessoa, produto ou referência — variações e Veo a seguir.",
     icon: "🖼",
   },
   {
     id: "video",
     title: "Start from Video",
-    titlePt: "Começar com Vídeo",
-    desc: "Anúncio existente, VSL, UGC ou vídeo de referência.",
+    titlePt: "Começar com vídeo",
+    desc: "Importa um clip e trabalha a partir dele.",
     icon: "▶",
-  },
-  {
-    id: "upload",
-    title: "Upload Assets",
-    titlePt: "Upload de Assets",
-    desc: "Várias imagens e vídeos de uma vez para o projecto.",
-    icon: "⇪",
   },
   {
     id: "generate_image",
     title: "Generate Image",
-    titlePt: "Gerar Imagem",
-    desc: "Cria uma imagem com prompt — depois varia, anima ou monta ad.",
+    titlePt: "Gerar imagem",
+    desc: "Nano Banana Pro — prompt no studio, depois variações ou animar.",
     icon: "🎨",
   },
   {
     id: "generate_video",
     title: "Generate Video",
-    titlePt: "Gerar Vídeo",
-    desc: "Clip individual com Veo a partir de um prompt.",
+    titlePt: "Gerar vídeo",
+    desc: "Veo a partir de prompt, ou anima uma imagem já no projecto.",
     icon: "🎬",
+  },
+  {
+    id: "prompt",
+    title: "Generate Ad",
+    titlePt: "Gerar anúncio",
+    desc: "Brief → copy → cenas → imagens → vídeo. Pipeline Ecoom completa.",
+    icon: "✦",
   },
 ];
 
@@ -52,20 +52,22 @@ export function getStartingPoint(id) {
   return STARTING_POINTS.find((s) => s.id === id) || STARTING_POINTS[0];
 }
 
-/** Default workspace tab per entry mode. */
-export function getEntryRoute(startingPoint = "prompt") {
+/** Default workspace tab per entry mode. Studio home is Images. */
+export function getEntryRoute(startingPoint = "upload") {
   switch (startingPoint) {
-    case "image":
-    case "video":
-    case "upload":
-      return { tab: "assets", action: startingPoint };
-    case "generate_image":
-      return { tab: "assets", action: "generate-image" };
-    case "generate_video":
-      return { tab: "assets", action: "generate-video" };
     case "prompt":
-    default:
       return { tab: "create", action: null };
+    case "video":
+      return { tab: "videos", action: "video" };
+    case "generate_video":
+      return { tab: "videos", action: "generate-video" };
+    case "image":
+      return { tab: "images", action: "image" };
+    case "generate_image":
+      return { tab: "images", action: "generate-image" };
+    case "upload":
+    default:
+      return { tab: "images", action: "upload" };
   }
 }
 
