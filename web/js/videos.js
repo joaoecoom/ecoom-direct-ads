@@ -4,11 +4,22 @@ import {
   animateSceneVideo,
   fetchProjectAssets,
 } from "./api.js";
+import {
+  bindAssetStudioInteractions,
+  createAssetStudioState,
+  handleAssetAction,
+  ingestDroppedFiles,
+  renderAssetActionsPanel,
+  renderAssetsGridHtml,
+  setupPanelDragDrop,
+  uploadFilesToProject,
+} from "./asset-studio-shared.js";
 import { trackJob, stopJobTracking } from "./job-activity.js";
 import { getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
 let activeProjectId = null;
+const assetState = createAssetStudioState("all");
 
 export function initVideosTab(projectId) {
   activeProjectId = projectId;
@@ -22,11 +33,129 @@ function bindVideoEvents() {
   panel.dataset.bound = "1";
 
   document.getElementById("btn-animate-all")?.addEventListener("click", onAnimateAll);
+  document.getElementById("videos-studio-upload-input")?.addEventListener("change", onStudioUploadImages);
+  document.getElementById("videos-studio-upload-video-input")?.addEventListener("change", onStudioUploadVideos);
+
+  bindAssetStudioInteractions(panel, assetState, {
+    filterNavId: "videos-filter-nav",
+    onFilter: () => {
+      const project = getProject(activeProjectId);
+      renderProjectAssetsSection(project, assetState.cachedAssets);
+    },
+    onSelect: (assetId) => {
+      renderAssetActionsPanel(document.getElementById("videos-asset-actions"), assetId);
+    },
+    onAction: (action) => void runVideosAssetAction(action),
+  });
+
+  setupPanelDragDrop(panel, "videos-dropzone", (files) => {
+    void ingestDroppedFiles(activeProjectId, files, videosStudioCallbacks());
+  });
 
   panel.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-animate-scene]");
     if (btn) void onAnimateScene(btn.dataset.animateScene);
   });
+}
+
+function setVideosAssetsStatus(msg) {
+  const el = document.getElementById("videos-assets-status");
+  if (el) el.textContent = msg;
+}
+
+function showVideosStudioNotice(msg) {
+  const el = document.getElementById("videos-studio-notice");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function hideVideosStudioNotice() {
+  document.getElementById("videos-studio-notice")?.classList.add("hidden");
+}
+
+function videosStudioCallbacks() {
+  return {
+    onStatus: setVideosAssetsStatus,
+    onError: showVideosStudioNotice,
+    onComplete: async () => {
+      await renderVideosPanel(activeProjectId);
+    },
+  };
+}
+
+async function runVideosAssetAction(action) {
+  await handleAssetAction(action, {
+    projectId: activeProjectId,
+    selectedAssetId: assetState.selectedAssetId,
+    cachedAssets: assetState.cachedAssets,
+    onStatus: setVideosAssetsStatus,
+    onError: showVideosStudioNotice,
+    onComplete: async () => {
+      await renderVideosPanel(activeProjectId);
+    },
+  });
+}
+
+function renderProjectAssetsSection(project, assets) {
+  const grid = document.getElementById("videos-assets-grid");
+  if (!grid) return;
+
+  assetState.cachedAssets = assets;
+  const count = assets.length;
+  setVideosAssetsStatus(
+    count
+      ? `${count} asset(s) — anima imagens ou importa vídeos.`
+      : "Importa imagens ou vídeos — arrasta para aqui.",
+  );
+
+  if (!assets.length) {
+    grid.innerHTML = `
+      <div class="assets-empty card">
+        <h3>Sem assets ainda</h3>
+        <p class="muted">Arrasta imagens ou vídeos. Selecciona imagem → <strong>Animar</strong>.</p>
+      </div>`;
+    renderAssetActionsPanel(document.getElementById("videos-asset-actions"), null);
+    return;
+  }
+
+  grid.innerHTML = renderAssetsGridHtml(project, assets, assetState);
+  if (!assetState.selectedAssetId && assets[0]) assetState.selectedAssetId = assets[0].id;
+  renderAssetActionsPanel(document.getElementById("videos-asset-actions"), assetState.selectedAssetId);
+}
+
+async function onStudioUploadImages(e) {
+  const files = e.target.files;
+  if (!files?.length || !activeProjectId) return;
+  hideVideosStudioNotice();
+  setVideosAssetsStatus(`A enviar ${files.length} imagem(ns)...`);
+  try {
+    await uploadFilesToProject(activeProjectId, files);
+    await initProjects();
+    await renderVideosPanel(activeProjectId);
+    setVideosAssetsStatus("Imagens importadas.");
+  } catch (err) {
+    showVideosStudioNotice(err.message);
+  } finally {
+    e.target.value = "";
+  }
+}
+
+async function onStudioUploadVideos(e) {
+  const files = e.target.files;
+  if (!files?.length || !activeProjectId) return;
+  hideVideosStudioNotice();
+  setVideosAssetsStatus("A enviar vídeo...");
+  try {
+    await uploadFilesToProject(activeProjectId, files, { asVideo: true });
+    await initProjects();
+    await renderVideosPanel(activeProjectId);
+    setVideosAssetsStatus("Vídeo importado.");
+  } catch (err) {
+    showVideosStudioNotice(err.message);
+  } finally {
+    e.target.value = "";
+  }
 }
 
 function showVideosError(msg) {
@@ -57,13 +186,15 @@ function setVideosProgress(current, total) {
 export async function renderVideosPanel(projectId) {
   activeProjectId = projectId;
   hideVideosError();
+  hideVideosStudioNotice();
   setVideosProgress(0, 0);
 
   const grid = document.getElementById("scene-videos-grid");
   if (!grid) return;
 
+  const project = getProject(projectId);
   let assets = [];
-  let scenes = getProject(projectId)?.scenes || [];
+  let scenes = project?.scenes || [];
 
   try {
     const data = await fetchProjectAssets(projectId);
@@ -72,6 +203,8 @@ export async function renderVideosPanel(projectId) {
   } catch {
     /* offline */
   }
+
+  renderProjectAssetsSection(project, assets);
 
   const assetById = Object.fromEntries(assets.map((a) => [a.id, a]));
   const imagesReady = scenes.filter((s) => s.imageAssetId).length;
@@ -85,16 +218,19 @@ export async function renderVideosPanel(projectId) {
   setVideosStatus(
     scenes.length
       ? `${videosReady}/${scenes.length} clips · ${imagesReady}/${scenes.length} imagens prontas`
-      : "Gera blueprint + imagens na tab Images primeiro.",
+      : "Pipeline: gera blueprint + imagens abaixo — ou anima assets importados acima.",
   );
 
   if (!scenes.length) {
-    grid.innerHTML = `<div class="empty-state card"><p class="muted">Sem cenas ainda.</p></div>`;
+    grid.innerHTML = `
+      <div class="empty-state card">
+        <p class="muted">Sem cenas de storyboard — importa assets acima ou corre o pipeline na tab Images.</p>
+      </div>`;
     return;
   }
 
   grid.innerHTML = scenes
-    .map((scene, i) => {
+    .map((scene) => {
       const imgAsset = scene.imageAssetId ? assetById[scene.imageAssetId] : null;
       const vidAsset = scene.videoAssetId ? assetById[scene.videoAssetId] : null;
       const imgStatus = scene.status?.image || "pending";
@@ -205,4 +341,5 @@ function startJobPoll(jobId, sceneTotal = 1, label = "Animate All") {
 export function destroyVideosTab() {
   if (pollTimer) clearInterval(pollTimer);
   stopJobTracking();
+  assetState.selectedAssetId = null;
 }

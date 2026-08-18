@@ -6,13 +6,23 @@ import {
   generateBlueprint,
   regenerateSceneImage,
   syncJobToProject,
-  uploadAsset,
 } from "./api.js";
+import {
+  bindAssetStudioInteractions,
+  createAssetStudioState,
+  handleAssetAction,
+  ingestDroppedFiles,
+  renderAssetActionsPanel,
+  renderAssetsGridHtml,
+  setupPanelDragDrop,
+  uploadFilesToProject,
+} from "./asset-studio-shared.js";
 import { trackJob, stopJobTracking, waitForJob } from "./job-activity.js";
 import { ensureProjectOnServer, getProject, initProjects } from "./projects.js";
 
 let pollTimer = null;
 let activeProjectId = null;
+const assetState = createAssetStudioState("all");
 
 export function initImagesTab(projectId) {
   activeProjectId = projectId;
@@ -32,12 +42,131 @@ function bindImageEvents() {
   document.getElementById("upload-reference-input")?.addEventListener("change", onUploadReferences);
   document.getElementById("btn-sync-last-job")?.addEventListener("click", () => void onSyncLastJob());
 
+  document.getElementById("images-studio-upload-input")?.addEventListener("change", onStudioUploadImages);
+  document.getElementById("images-studio-upload-video-input")?.addEventListener("change", onStudioUploadVideos);
+
+  bindAssetStudioInteractions(panel, assetState, {
+    filterNavId: "images-filter-nav",
+    onFilter: () => {
+      const project = getProject(activeProjectId);
+      renderProjectAssetsSection(project, assetState.cachedAssets);
+    },
+    onSelect: (assetId) => {
+      renderAssetActionsPanel(document.getElementById("images-asset-actions"), assetId);
+    },
+    onAction: (action) => void runImagesAssetAction(action),
+  });
+
+  setupPanelDragDrop(panel, "images-dropzone", (files) => {
+    void ingestDroppedFiles(activeProjectId, files, imagesStudioCallbacks());
+  });
+
   panel.addEventListener("click", (e) => {
     const regen = e.target.closest("[data-regen-scene]");
     if (regen) {
       void onRegenerateScene(regen.dataset.regenScene);
     }
   });
+}
+
+function setImagesAssetsStatus(msg) {
+  const el = document.getElementById("images-assets-status");
+  if (el) el.textContent = msg;
+}
+
+function showImagesStudioNotice(msg) {
+  const el = document.getElementById("images-studio-notice");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function hideImagesStudioNotice() {
+  document.getElementById("images-studio-notice")?.classList.add("hidden");
+}
+
+function imagesStudioCallbacks() {
+  return {
+    onStatus: setImagesAssetsStatus,
+    onError: showImagesStudioNotice,
+    onComplete: async () => {
+      await renderImagesPanel(activeProjectId);
+    },
+  };
+}
+
+async function runImagesAssetAction(action) {
+  await handleAssetAction(action, {
+    projectId: activeProjectId,
+    selectedAssetId: assetState.selectedAssetId,
+    cachedAssets: assetState.cachedAssets,
+    onStatus: setImagesAssetsStatus,
+    onError: showImagesStudioNotice,
+    onComplete: async () => {
+      await renderImagesPanel(activeProjectId);
+    },
+  });
+}
+
+function renderProjectAssetsSection(project, assets) {
+  const grid = document.getElementById("images-assets-grid");
+  if (!grid) return;
+
+  assetState.cachedAssets = assets;
+  const count = assets.length;
+  setImagesAssetsStatus(
+    count
+      ? `${count} asset(s) — selecciona para variações, animar ou Build Ad.`
+      : "Sem assets — arrasta imagens ou vídeos para aqui.",
+  );
+
+  if (!assets.length) {
+    grid.innerHTML = `
+      <div class="assets-empty card">
+        <h3>Sem assets ainda</h3>
+        <p class="muted"><strong>Arrasta e solta</strong> ou + Imagem / + Vídeo. Estilo Flow — prepara antes do ad.</p>
+      </div>`;
+    renderAssetActionsPanel(document.getElementById("images-asset-actions"), null);
+    return;
+  }
+
+  grid.innerHTML = renderAssetsGridHtml(project, assets, assetState);
+  if (!assetState.selectedAssetId && assets[0]) assetState.selectedAssetId = assets[0].id;
+  renderAssetActionsPanel(document.getElementById("images-asset-actions"), assetState.selectedAssetId);
+}
+
+async function onStudioUploadImages(e) {
+  const files = e.target.files;
+  if (!files?.length || !activeProjectId) return;
+  hideImagesStudioNotice();
+  setImagesAssetsStatus(`A enviar ${files.length} imagem(ns)...`);
+  try {
+    await uploadFilesToProject(activeProjectId, files);
+    await initProjects();
+    await renderImagesPanel(activeProjectId);
+    setImagesAssetsStatus("Upload concluído.");
+  } catch (err) {
+    showImagesStudioNotice(err.message);
+  } finally {
+    e.target.value = "";
+  }
+}
+
+async function onStudioUploadVideos(e) {
+  const files = e.target.files;
+  if (!files?.length || !activeProjectId) return;
+  hideImagesStudioNotice();
+  setImagesAssetsStatus("A enviar vídeo...");
+  try {
+    await uploadFilesToProject(activeProjectId, files, { asVideo: true });
+    await initProjects();
+    await renderImagesPanel(activeProjectId);
+    setImagesAssetsStatus("Vídeo importado.");
+  } catch (err) {
+    showImagesStudioNotice(err.message);
+  } finally {
+    e.target.value = "";
+  }
 }
 
 function showImagesError(msg) {
@@ -164,6 +293,7 @@ function renderReferencesPanel(project, assets) {
 
 export async function renderImagesPanel(projectId) {
   activeProjectId = projectId;
+  hideImagesStudioNotice();
 
   const project = getProject(projectId);
   const grid = document.getElementById("scene-images-grid");
@@ -179,6 +309,8 @@ export async function renderImagesPanel(projectId) {
   } catch {
     /* offline */
   }
+
+  renderProjectAssetsSection(project, assets);
 
   const hasBlueprint = Boolean(project?.blueprintPath);
   const hasCopy = Boolean(project?.latestCopy || project?.activeCreative?.copy);
@@ -378,16 +510,7 @@ async function onRegenerateScene(sceneId) {
 }
 
 async function uploadFilesAs(files, { asReference = false } = {}) {
-  for (const file of files) {
-    const data = await fileToBase64(file);
-    await uploadAsset(activeProjectId, {
-      data,
-      filename: file.name,
-      mimeType: file.type,
-      role: asReference ? "reference" : undefined,
-      label: file.name,
-    });
-  }
+  await uploadFilesToProject(activeProjectId, files, { asReference });
 }
 
 async function onUploadFiles(e) {
@@ -426,13 +549,10 @@ async function onUploadReferences(e) {
   }
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+export function destroyImagesTab() {
+  if (pollTimer) clearInterval(pollTimer);
+  stopJobTracking();
+  assetState.selectedAssetId = null;
 }
 
 function startJobPoll(jobId, label, jobType = "images") {
@@ -472,9 +592,4 @@ function escapeHtml(str) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-export function destroyImagesTab() {
-  if (pollTimer) clearInterval(pollTimer);
-  stopJobTracking();
 }

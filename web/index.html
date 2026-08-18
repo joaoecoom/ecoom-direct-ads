@@ -239,9 +239,52 @@
           </div>
 
           <div id="panel-images" class="workspace-panel hidden">
+            <section class="studio-section card">
+              <div class="studio-section-head">
+                <div>
+                  <p class="eyebrow">Image Studio</p>
+                  <h2>Imagens & vídeos do projecto</h2>
+                  <p id="images-assets-status" class="muted">Arrasta ficheiros ou usa + Imagem / + Vídeo.</p>
+                </div>
+                <div class="images-actions">
+                  <label class="btn sm upload-label">
+                    + Imagem
+                    <input type="file" id="images-studio-upload-input" accept="image/*" multiple hidden />
+                  </label>
+                  <label class="btn sm upload-label">
+                    + Vídeo
+                    <input type="file" id="images-studio-upload-video-input" accept="video/*" hidden />
+                  </label>
+                </div>
+              </div>
+              <div id="images-studio-notice" class="card pipeline-hint hidden"></div>
+              <div id="images-dropzone" class="assets-dropzone card hidden">
+                <div class="assets-dropzone-inner">
+                  <strong>Solta ficheiros aqui</strong>
+                  <p class="muted">Imagens e vídeos entram no projecto — variações, animar, Build Ad.</p>
+                </div>
+              </div>
+              <div class="assets-workspace">
+                <nav id="images-filter-nav" class="assets-filter-nav card" aria-label="Filtrar assets">
+                  <button type="button" class="assets-filter active" data-assets-filter="all">Todas</button>
+                  <button type="button" class="assets-filter" data-assets-filter="image">Imagens</button>
+                  <button type="button" class="assets-filter" data-assets-filter="video">Vídeos</button>
+                  <button type="button" class="assets-filter" data-assets-filter="character">Personagens</button>
+                </nav>
+                <div class="assets-layout">
+                  <div id="images-assets-grid" class="assets-grid"></div>
+                  <aside id="images-asset-actions" class="asset-actions-panel card">
+                    <p class="muted">Selecciona um asset para ver acções.</p>
+                  </aside>
+                </div>
+              </div>
+            </section>
+
+            <section class="studio-section studio-pipeline">
             <div class="images-toolbar card">
               <div>
-                <h2>Scene Images</h2>
+                <p class="eyebrow">Pipeline Ecoom</p>
+                <h2>Cenas do storyboard</h2>
                 <p id="images-status" class="muted">Gera prompts automáticos por cena a partir do blueprint.</p>
               </div>
               <div class="images-actions">
@@ -250,7 +293,7 @@
                   Generate All Images
                 </button>
                 <label class="btn sm upload-label">
-                  Upload
+                  Upload cena
                   <input type="file" id="upload-asset-input" accept="image/*" multiple hidden />
                 </label>
               </div>
@@ -284,13 +327,56 @@
               <div id="references-grid" class="references-grid"></div>
             </div>
             <div id="scene-images-grid" class="scene-images-grid"></div>
+            </section>
           </div>
 
           <div id="panel-videos" class="workspace-panel hidden">
+            <section class="studio-section card">
+              <div class="studio-section-head">
+                <div>
+                  <p class="eyebrow">Video Studio</p>
+                  <h2>Vídeos & imagens do projecto</h2>
+                  <p id="videos-assets-status" class="muted">Importa clips, selecciona imagem → Animar.</p>
+                </div>
+                <div class="images-actions">
+                  <label class="btn sm upload-label">
+                    + Imagem
+                    <input type="file" id="videos-studio-upload-input" accept="image/*" multiple hidden />
+                  </label>
+                  <label class="btn sm upload-label">
+                    + Vídeo
+                    <input type="file" id="videos-studio-upload-video-input" accept="video/*" hidden />
+                  </label>
+                </div>
+              </div>
+              <div id="videos-studio-notice" class="card pipeline-hint hidden"></div>
+              <div id="videos-dropzone" class="assets-dropzone card hidden">
+                <div class="assets-dropzone-inner">
+                  <strong>Solta ficheiros aqui</strong>
+                  <p class="muted">Vídeos e imagens — anima imagens ou usa no ad.</p>
+                </div>
+              </div>
+              <div class="assets-workspace">
+                <nav id="videos-filter-nav" class="assets-filter-nav card" aria-label="Filtrar assets">
+                  <button type="button" class="assets-filter active" data-assets-filter="all">Todas</button>
+                  <button type="button" class="assets-filter" data-assets-filter="image">Imagens</button>
+                  <button type="button" class="assets-filter" data-assets-filter="video">Vídeos</button>
+                </nav>
+                <div class="assets-layout">
+                  <div id="videos-assets-grid" class="assets-grid"></div>
+                  <aside id="videos-asset-actions" class="asset-actions-panel card">
+                    <p class="muted">Selecciona um asset — Animar, variações, Build Ad.</p>
+                  </aside>
+                </div>
+              </div>
+            </section>
+
+            <section class="studio-section studio-pipeline">
             <div class="images-toolbar card">
               <div>
-                <h2>Scene Videos</h2>
-                <p id="videos-status" class="muted">Animate All — usa imagens existentes, sem regenerar.</p>
+                <p class="eyebrow">Pipeline Ecoom</p>
+                <h2>Cenas animadas</h2>
+                <p id="videos-status" class="muted">Animate All — usa imagens do storyboard.</p>
               </div>
               <div class="images-actions">
                 <button type="button" class="btn primary sm" id="btn-animate-all" disabled>
@@ -307,6 +393,7 @@
             </div>
             <div id="videos-error" class="card error hidden"></div>
             <div id="scene-videos-grid" class="scene-images-grid"></div>
+            </section>
           </div>
 
           <div id="panel-timeline" class="workspace-panel hidden">

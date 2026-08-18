@@ -1901,6 +1901,36 @@ video {
   margin: 0.25rem 0 0.5rem;
 }
 
+.studio-section {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+}
+
+.studio-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.studio-section-head h2 {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 1.15rem;
+}
+
+.studio-pipeline {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  margin-bottom: 0;
+}
+
+.studio-pipeline .images-toolbar {
+  margin-bottom: 0.75rem;
+}
+
 .assets-workspace {
   display: grid;
   grid-template-columns: 160px 1fr;
