@@ -44,7 +44,30 @@ async function generateUgcSceneImage({
   refNote = "",
 }) {
   const prompt = buildScenePrompt(scene, storyboard, sceneIndex, sceneTotal, refNote);
-  const isBroll = (scene.sceneType || "ugc") === "broll";
+  const sceneType = scene.sceneType || "ugc";
+  const isBroll = sceneType === "broll";
+  const isReact = sceneType === "react_overlay";
+
+  if (isBroll) {
+    const brollPrompt = `${prompt} Cinematic B-roll still, product/lifestyle detail, NO face, NO talking head, single frame, premium ad photography.`;
+    if (referenceImagePaths.length) {
+      await generateImageWithReferences({
+        prompt: brollPrompt,
+        referenceImagePaths: referenceImagePaths.slice(0, 3),
+        outputPath,
+        aspectRatio,
+        ugc: false,
+      });
+    } else {
+      await generateImage({
+        prompt: brollPrompt,
+        outputPath,
+        aspectRatio,
+        ugc: false,
+      });
+    }
+    return;
+  }
 
   if (sceneIndex === 0) {
     if (avatarImagePath) {
@@ -82,12 +105,21 @@ async function generateUgcSceneImage({
 
   const identityAnchor = anchorPath || avatarImagePath;
   const refPaths = [];
-  if (identityAnchor) refPaths.push(identityAnchor);
-  if (previousPath && previousPath !== identityAnchor) refPaths.push(previousPath);
+  if (identityAnchor && !isBroll) refPaths.push(identityAnchor);
+  if (previousPath && previousPath !== identityAnchor && !isBroll) refPaths.push(previousPath);
+
+  if (isReact && identityAnchor) {
+    refPaths.length = 0;
+    refPaths.push(identityAnchor);
+    if (previousPath && previousPath !== identityAnchor) refPaths.push(previousPath);
+  }
 
   if (refPaths.length >= 1) {
+    const reactNote = isReact
+      ? " Person reacting to content visible on phone screen overlay. Single frame, one person."
+      : "";
     await generateImageWithReferences({
-      prompt: buildIdentityReferencePrompt(prompt, {
+      prompt: buildIdentityReferencePrompt(`${prompt}${reactNote}`, {
         hasPreviousFrame: refPaths.length > 1,
       }),
       referenceImagePaths: refPaths.slice(0, 2),
@@ -166,7 +198,8 @@ export async function generateStoryboardImages({
         anchorPath,
         previousPath: previousImagePath,
         avatarImagePath,
-        referenceImagePaths: i === 0 ? referenceImagePaths : [],
+        referenceImagePaths:
+          scene.sceneType === "broll" ? referenceImagePaths : i === 0 ? referenceImagePaths : [],
         refNote,
       });
       if (!anchorPath) anchorPath = imageFile;

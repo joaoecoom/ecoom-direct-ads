@@ -10,6 +10,7 @@ import {
   resolveVoicePipeline,
   shouldUseUgcFlow,
 } from "./ugc-flow.js";
+import { applyPostProduction, needsPostProduction } from "./post-production.js";
 
 /**
  * Rebuild final MP4 from clips existentes — ffmpeg + voz PT-PT (como full_ad no Cursor).
@@ -136,12 +137,40 @@ export async function rebuildTimelineVideo({
     finalVideo = outputPath;
   }
 
+  const clipDuration = storyboard?.durationSeconds || adConfig.clipDurationSeconds || 8;
+  const postPath = path.join(workDir, `post-${path.basename(outputPath)}`);
+
+  if (needsPostProduction(storyboard, adConfig)) {
+    onProgress?.({ step: "post", message: "Pós-produção (legendas, SFX, música)…" });
+    const { applied } = await applyPostProduction({
+      videoPath: finalVideo,
+      storyboard,
+      adConfig,
+      outputPath: postPath,
+      clipDurationSeconds: clipDuration,
+      crossfadeSeconds,
+      onProgress,
+    });
+    if (applied.length) {
+      if (finalVideo !== outputPath && finalVideo !== silentPath) {
+        await fs.unlink(finalVideo).catch(() => {});
+      }
+      await fsRenameOrCopy(postPath, outputPath);
+      finalVideo = outputPath;
+    }
+  }
+
+  if (finalVideo === silentPath && finalVideo !== outputPath) {
+    await fs.unlink(silentPath).catch(() => {});
+  }
+
   return {
-    finalVideo,
+    finalVideo: finalVideo === outputPath ? outputPath : finalVideo,
     clipCount: clipPaths.length,
     crossfadeSeconds,
     veoFlow,
     voiceApplied: useExternalTts,
+    postProduction: needsPostProduction(storyboard, adConfig),
   };
 }
 

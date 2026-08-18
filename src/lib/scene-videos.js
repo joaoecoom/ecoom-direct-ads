@@ -70,6 +70,30 @@ export async function animateSceneVideo({
     storyboard.scenes?.find((s, i) => (s.id || `parte-${i + 1}`) === scene.id) ||
     scene;
 
+  const sceneType = storyboardScene.sceneType || "ugc";
+
+  if (sceneType === "broll") {
+    const brollMotion =
+      motionPromptOverride ||
+      storyboardScene.motionPrompt ||
+      "Slow cinematic B-roll camera move, product/lifestyle detail, shallow depth of field, smooth motion, no talking head.";
+    const id = scene.id || `parte-${sceneIndex + 1}`;
+    await ensureOutputDir(outputDir);
+    const outputFileName = path.join(outputDir, `${id}.mp4`);
+    console.log(`🎬 B-roll Veo: ${id}…`);
+    const clip = await generateVideoFromImage({
+      imagePath,
+      lastFramePath: useFlow ? lastFramePath : undefined,
+      prompt: brollMotion,
+      aspectRatio,
+      durationSeconds: clipDuration,
+      resolution,
+      outputFileName,
+      runLabel: runLabel || `veo-broll/${id}`,
+    });
+    return { sceneId: id, path: clip.localPath, prompt: brollMotion, order: sceneIndex };
+  }
+
   const prompt = buildSceneVeoPrompt(
     storyboard,
     storyboardScene,

@@ -9,7 +9,7 @@ const PIPELINE_BY_TYPE = {
   videos: ["queued", "video", "rebuild", "done"],
   videos_only: ["queued", "video", "done"],
   scene_video: ["queued", "video", "done"],
-  rebuild: ["queued", "rebuild", "done"],
+  rebuild: ["queued", "rebuild", "post", "done"],
   variations: ["queued", "image", "done"],
   standalone_image: ["queued", "image", "done"],
   standalone_video: ["queued", "image", "video", "done"],
@@ -28,6 +28,7 @@ const STEP_LABELS = {
   lipsync: "Lip sync",
   mix: "Mix",
   rebuild: "FFmpeg",
+  post: "Pós-prod",
   done: "Pronto",
   error: "Erro",
 };
@@ -44,6 +45,7 @@ const HUMAN_STEP_INTRO = {
   lipsync: "A sincronizar lábios…",
   mix: "A misturar áudio e vídeo…",
   rebuild: "A remontar timeline final…",
+  post: "Legendas, SFX nos cortes e música…",
   done: "Concluído.",
   error: "Algo correu mal.",
 };

@@ -129,8 +129,34 @@ function parseJsonResponse(raw) {
   }
 }
 
+function assignSceneTypes(storyboard, config) {
+  const scenes = storyboard.scenes || [];
+  const ratio = config.brollRatio || "medium";
+  const brollEvery = ratio === "high" ? 2 : ratio === "low" ? 5 : 3;
+  const fmt = config.videoFormat || "talking_head";
+
+  for (let i = 0; i < scenes.length; i++) {
+    if (scenes[i].sceneType) continue;
+
+    if (fmt === "ugc_react") {
+      scenes[i].sceneType = i > 0 && i % 4 === 3 ? "react_overlay" : "ugc";
+    } else if (fmt === "ugc_broll" || fmt === "mixed") {
+      scenes[i].sceneType = i > 0 && i % brollEvery === brollEvery - 1 ? "broll" : "ugc";
+    } else if (fmt === "ugc_demo") {
+      scenes[i].sceneType = "ugc";
+      if (!scenes[i].visualBeat?.includes("product")) {
+        scenes[i].visualBeat = `${scenes[i].visualBeat || ""} Holding/showing product naturally.`.trim();
+      }
+    } else {
+      scenes[i].sceneType = "ugc";
+    }
+  }
+}
+
 function applyUgcRules(storyboard, config) {
   if (config.style !== "ugc") return storyboard;
+
+  assignSceneTypes(storyboard, config);
 
   const brief = [storyboard.characterBrief, storyboard.settingBrief]
     .filter(Boolean)
@@ -143,10 +169,25 @@ function applyUgcRules(storyboard, config) {
     const n = storyboard.scenes.length;
 
     if (!scene.sceneType) {
-      scene.sceneType = config.videoFormat === "ugc_broll" && i > 0 && i % 3 === 2 ? "broll" : "ugc";
+      scene.sceneType = "ugc";
     }
 
-    if (brief && !scene.imagePrompt.toLowerCase().includes(brief.slice(0, 30).toLowerCase())) {
+    if (scene.sceneType === "broll" && !scene.onScreenText) {
+      scene.onScreenText = "";
+    }
+    if (scene.sceneType === "react_overlay") {
+      scene.motionPrompt =
+        scene.motionPrompt ||
+        "Person reacts to phone screen content with surprised/engaged expression, glances at overlay, preserve identity, UGC selfie.";
+    }
+    if (scene.sceneType === "broll") {
+      scene.motionPrompt =
+        scene.motionPrompt ||
+        "Slow cinematic push-in, product/lifestyle B-roll, shallow depth of field, no talking head, smooth motion.";
+      scene.voiceoverLine = scene.voiceoverLine || "";
+    }
+
+    if (brief && scene.sceneType === "ugc" && !scene.imagePrompt.toLowerCase().includes(brief.slice(0, 30).toLowerCase())) {
       scene.imagePrompt = `${brief}. Scene ${i + 1} of ${n} in continuous UGC video. ${beat}. ${scene.imagePrompt}`;
     }
 
