@@ -56,6 +56,11 @@ export async function rebuildTimelineVideo({
   await concatenateVideos(clipPaths, silentPath, {
     crossfadeSeconds,
     keepAudio: false,
+    onProgress: (u) =>
+      onProgress?.({
+        step: "rebuild",
+        message: u.message || "FFmpeg…",
+      }),
   });
 
   let finalVideo = silentPath;
@@ -104,6 +109,11 @@ export async function rebuildTimelineVideo({
     await concatenateVideos(voicedClips, outputPath, {
       crossfadeSeconds,
       keepAudio: true,
+      onProgress: (u) =>
+        onProgress?.({
+          step: "rebuild",
+          message: u.message || "FFmpeg com voz…",
+        }),
     });
     finalVideo = outputPath;
   } else if (useVeoNativeAudio) {
@@ -114,6 +124,11 @@ export async function rebuildTimelineVideo({
     await concatenateVideos(clipPaths, outputPath, {
       crossfadeSeconds,
       keepAudio: true,
+      onProgress: (u) =>
+        onProgress?.({
+          step: "rebuild",
+          message: u.message || "FFmpeg áudio nativo…",
+        }),
     });
     finalVideo = outputPath;
   } else {

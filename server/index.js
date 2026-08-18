@@ -12,6 +12,13 @@ import {
   AD_RESOLUTIONS,
   AD_STYLES,
   AD_TONES,
+  AD_UGC_SETTINGS,
+  AD_VIDEO_FORMATS,
+  AD_BROLL_SOURCES,
+  AD_HOOK_STYLES,
+  AD_CAPTION_STYLES,
+  AD_POST_AUDIO,
+  AD_EDIT_SFX,
   LANGUAGE_VARIANTS,
   MAX_SCENE_COUNT,
   MAX_TOTAL_DURATION_SECONDS,
@@ -67,7 +74,17 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "*";
 
 let activeJobId = null;
 const queue = [];
-const STALE_JOB_MS = Number.parseInt(process.env.JOB_STALE_MS || "180000", 10); // 3 min sem progresso
+const STALE_JOB_MS = Number.parseInt(process.env.JOB_STALE_MS || "180000", 10);
+const REBUILD_STALE_BASE_MS = Number.parseInt(process.env.REBUILD_STALE_MS || "600000", 10);
+const REBUILD_STALE_PER_CLIP_MS = Number.parseInt(process.env.REBUILD_STALE_PER_CLIP_MS || "45000", 10);
+
+function staleJobThresholdMs(job) {
+  if (job?.type === "rebuild" || job?.request?.type === "rebuild") {
+    const clipCount = job?.request?.clipCount || job?.result?.clipCount || 12;
+    return REBUILD_STALE_BASE_MS + clipCount * REBUILD_STALE_PER_CLIP_MS;
+  }
+  return STALE_JOB_MS;
+}
 
 const app = express();
 app.use(
@@ -121,6 +138,13 @@ app.get("/api/config", (_req, res) => {
     resolutions: AD_RESOLUTIONS,
     tones: AD_TONES,
     styles: AD_STYLES,
+    ugcSettings: AD_UGC_SETTINGS,
+    videoFormats: AD_VIDEO_FORMATS,
+    brollSources: AD_BROLL_SOURCES,
+    hookStyles: AD_HOOK_STYLES,
+    captionStyles: AD_CAPTION_STYLES,
+    postAudio: AD_POST_AUDIO,
+    editSfx: AD_EDIT_SFX,
     features: {
       projects: true,
       assets: true,
@@ -956,12 +980,14 @@ app.listen(PORT, () => {
         return;
       }
       const updated = new Date(job.updatedAt || job.createdAt).getTime();
-      if (Date.now() - updated > STALE_JOB_MS) {
+      if (Date.now() - updated > staleJobThresholdMs(job)) {
         console.error(`[queue] Job ${activeJobId} sem progresso — a libertar fila`);
         await safeUpdateJob(activeJobId, {
           status: "failed",
           error:
-            "Job bloqueado (sem progresso). Usa Images → Blueprint → Videos passo a passo, ou tenta outra vez.",
+            job.type === "rebuild"
+              ? "Rebuild demorou demasiado (FFmpeg com muitos clips). Tenta outra vez ou reduz crossfade."
+              : "Job bloqueado (sem progresso). Usa Images → Blueprint → Videos passo a passo, ou tenta outra vez.",
           progress: { step: "error", message: "Timeout — fila libertada" },
         });
         activeJobId = null;

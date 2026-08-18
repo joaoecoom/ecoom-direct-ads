@@ -2,6 +2,17 @@
  * Prompts otimizados para imagens UGC hiper-realistas (Nano Banana Pro).
  */
 
+export const SINGLE_FRAME_RULES = `
+SINGLE FRAME ONLY: exactly ONE person visible, ONE continuous photograph.
+NO split screen, NO diptych, NO side-by-side duplicates, NO before/after, NO collage, NO grid.
+NO phone gallery UI, NO "Photos" app chrome, NO screenshot frame, NO picture-in-picture.
+NO two versions of the same person in one image.`;
+
+export const LOOK_LOCK_RULES = `
+LOCKED LOOK: identical person identity, same outfit and colors, same hairstyle, same skin tone.
+Same color grading, white balance, and lighting temperature as the identity reference.
+Do NOT change age, ethnicity, face shape, or wardrobe between frames.`;
+
 export const HUMAN_REALISM_SUFFIX = `
 Authentic unedited smartphone selfie still, iPhone 15 Pro front camera 24mm, slight lens distortion.
 Real human photographed in life — NOT AI-generated look, NOT illustration, NOT 3D, NOT CGI.
@@ -28,16 +39,32 @@ export function buildHumanizedImagePrompt(basePrompt, { ugc = false } = {}) {
     return `${core}. Photorealistic, premium advertising photography, natural lighting.`;
   }
   return `${core}
+${SINGLE_FRAME_RULES}
+${LOOK_LOCK_RULES}
+${HUMAN_REALISM_SUFFIX}
+${HUMAN_REALISM_NEGATIVE}`;
+}
+
+export function buildIdentityReferencePrompt(basePrompt, { hasPreviousFrame = false } = {}) {
+  const refNote = hasPreviousFrame
+    ? "Reference 1 = IDENTITY ANCHOR (exact face, age, hair, outfit colors). Reference 2 = previous frame (pose/expression only — do NOT drift identity)."
+    : "Reference image = IDENTITY ANCHOR — preserve this exact face, age, hair, outfit, and color grade.";
+  return `${basePrompt}
+${refNote}
+${SINGLE_FRAME_RULES}
+${LOOK_LOCK_RULES}
 ${HUMAN_REALISM_SUFFIX}
 ${HUMAN_REALISM_NEGATIVE}`;
 }
 
 export function buildHumanizedVariationPrompt(visualBeat, sceneIndex, sceneTotal) {
   return `${visualBeat}. Frame ${sceneIndex}/${sceneTotal} of ONE continuous handheld UGC selfie video — same take, same person.
-SAME face identity: age, skin texture, hair, body type — preserve from reference frame exactly.
+SAME face identity: age, skin texture, hair, body type, outfit — preserve from reference frame exactly.
 Same phone distance and angle; only natural micro-movement (expression, slight head tilt, hand gesture).
 If the beat changes location, evolve the background gradually — never a jump-cut look.
 Preserve all human realism from reference — do NOT reset to generic AI face.
+${SINGLE_FRAME_RULES}
+${LOOK_LOCK_RULES}
 ${HUMAN_REALISM_SUFFIX}
 ${HUMAN_REALISM_NEGATIVE}`;
 }

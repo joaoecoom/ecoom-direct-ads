@@ -1,5 +1,6 @@
 import { createClient } from "./veo-client.js";
 import { resolveAdConfig } from "./ad-config.js";
+import { getStoryboardCreativeRules } from "./creative-format.js";
 import { buildFlowMotionPrompt } from "./image-prompts.js";
 
 function buildStoryboardSchema(config) {
@@ -27,6 +28,8 @@ function buildStoryboardSchema(config) {
         voiceoverLine: "O que a pessoa DIZ nesta parte — PT-PT europeu, vocabulário de Portugal",
         visualBeat:
           "EN — só o que muda nesta cena: expressão, gesto, postura (continuação do discurso)",
+        sceneType: "ugc | broll | react_overlay — tipo de plano",
+        editingNotes: "notas de edição: whoosh no corte, zoom, etc. (opcional)",
         imagePrompt:
           "prompt EN: characterBrief + settingBrief + visualBeat desta cena",
         motionPrompt:
@@ -139,8 +142,20 @@ function applyUgcRules(storyboard, config) {
     const beat = scene.visualBeat || scene.role || `scene ${i + 1} continuation`;
     const n = storyboard.scenes.length;
 
+    if (!scene.sceneType) {
+      scene.sceneType = config.videoFormat === "ugc_broll" && i > 0 && i % 3 === 2 ? "broll" : "ugc";
+    }
+
     if (brief && !scene.imagePrompt.toLowerCase().includes(brief.slice(0, 30).toLowerCase())) {
       scene.imagePrompt = `${brief}. Scene ${i + 1} of ${n} in continuous UGC video. ${beat}. ${scene.imagePrompt}`;
+    }
+
+    if (i === 0 && config.hookStyle) {
+      scene.role = scene.role || `Hook — ${config.hookStyle}`;
+    }
+
+    if (config.editSfx && config.editSfx !== "none" && !scene.editingNotes) {
+      scene.editingNotes = `Cut transition: ${config.editSfx}`;
     }
 
     if (!scene.motionPrompt || scene.motionPrompt.length < 40) {
@@ -177,6 +192,7 @@ export async function generateStoryboard({ offer, adConfig: adConfigOverrides = 
   const client = createClient();
   const schema = buildStoryboardSchema(adConfig);
   const styleRules = getStyleRules(adConfig);
+  const creativeRules = getStoryboardCreativeRules(adConfig);
 
   const langNote =
     languageVariant === "pt-PT"
@@ -199,6 +215,8 @@ PARÂMETROS FIXOS:
 - Estilo: ${style}
 
 ${styleRules}
+
+${creativeRules}
 
 Responde APENAS JSON válido:
 ${JSON.stringify(schema, null, 2)}`;
@@ -249,6 +267,14 @@ ${JSON.stringify(schema, null, 2)}`;
   storyboard.languageVariant = adConfig.languageVariant;
   storyboard.tone = adConfig.tone;
   storyboard.style = adConfig.style;
+  storyboard.postProduction = {
+    captions: adConfig.captions,
+    captionStyle: adConfig.captions,
+    backgroundMusic: adConfig.backgroundMusic,
+    editSfx: adConfig.editSfx,
+    videoFormat: adConfig.videoFormat,
+    ugcSetting: adConfig.ugcSetting,
+  };
   storyboard.generatedAt = new Date().toISOString();
   storyboard.offer = offer;
   storyboard.model = model;
@@ -315,6 +341,7 @@ export async function generateStoryboardFromCopy({
     process.env.GEMINI_STORYBOARD_MODEL || "gemini-2.5-flash";
   const client = createClient();
   const styleRules = getStyleRules(adConfig);
+  const creativeRules = getStoryboardCreativeRules(adConfig);
 
   const langNote =
     adConfig.languageVariant === "pt-PT"
@@ -335,6 +362,7 @@ IDIOMA voiceoverLine: ${langNote}
 FORMATO: ${adConfig.aspectRatio} · Resolução: ${adConfig.resolution}
 ESTILO: ${adConfig.style} · TOM: ${adConfig.tone}
 ${styleRules}
+${creativeRules}
 
 REGRAS DE ESTRUTURA (TU DECIDES):
 - Número de cenas: o que a copy precisar (tipicamente 3–12; mais se copy longa)

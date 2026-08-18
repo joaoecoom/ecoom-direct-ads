@@ -38,6 +38,12 @@ const STEPS = [
     field: "format",
   },
   {
+    id: "creative",
+    title: "Formato do vídeo",
+    hint: "UGC, B-roll, hooks, legendas e pós-produção.",
+    field: "creative",
+  },
+  {
     id: "duration",
     title: "Duração aproximada",
     hint: "Opcional — orienta a copy. A IA decide cenas e clip.",
@@ -364,6 +370,85 @@ function renderStep() {
     attachFieldEnter(varEl);
     attachFieldEnter(fmtEl);
     attachFieldEnter(resEl);
+    return;
+  }
+
+  if (step.field === "creative") {
+    els.stepBody.innerHTML = `
+      <h3 class="wizard-q">${step.title}</h3>
+      <p class="muted wizard-hint">${step.hint}</p>
+      <div class="grid wizard-creative-grid">
+        <div>
+          <label for="w-ugc-setting">Cenário UGC</label>
+          <select id="w-ugc-setting"></select>
+        </div>
+        <div>
+          <label for="w-video-format">Formato do ad</label>
+          <select id="w-video-format"></select>
+        </div>
+        <div>
+          <label for="w-broll-source">B-roll</label>
+          <select id="w-broll-source"></select>
+        </div>
+        <div>
+          <label for="w-broll-ratio">Intensidade B-roll</label>
+          <select id="w-broll-ratio">
+            <option value="low">Baixa (~15%)</option>
+            <option value="medium">Média (~25%)</option>
+            <option value="high">Alta (~40%)</option>
+          </select>
+        </div>
+        <div>
+          <label for="w-hook">Hook (3s)</label>
+          <select id="w-hook"></select>
+        </div>
+        <div>
+          <label for="w-captions">Legendas</label>
+          <select id="w-captions"></select>
+        </div>
+        <div>
+          <label for="w-music">Música de fundo</label>
+          <select id="w-music"></select>
+        </div>
+        <div>
+          <label for="w-sfx">Efeitos nos cortes</label>
+          <select id="w-sfx"></select>
+        </div>
+      </div>
+    `;
+    const ugcEl = document.getElementById("w-ugc-setting");
+    const vfEl = document.getElementById("w-video-format");
+    const brollEl = document.getElementById("w-broll-source");
+    const ratioEl = document.getElementById("w-broll-ratio");
+    const hookEl = document.getElementById("w-hook");
+    const capEl = document.getElementById("w-captions");
+    const musicEl = document.getElementById("w-music");
+    const sfxEl = document.getElementById("w-sfx");
+
+    fillSelect(ugcEl, config?.ugcSettings || [], (s) => s.id, (s) => s.label, state.ugcSetting);
+    fillSelect(vfEl, config?.videoFormats || [], (s) => s.id, (s) => s.label, state.videoFormat);
+    fillSelect(brollEl, config?.brollSources || [], (s) => s.id, (s) => s.label, state.brollSource);
+    fillSelect(hookEl, config?.hookStyles || [], (s) => s.id, (s) => s.label, state.hookStyle);
+    fillSelect(capEl, config?.captionStyles || [], (s) => s.id, (s) => s.label, state.captions);
+    fillSelect(musicEl, config?.postAudio || [], (s) => s.id, (s) => s.label, state.backgroundMusic);
+    fillSelect(sfxEl, config?.editSfx || [], (s) => s.id, (s) => s.label, state.editSfx);
+    if (ratioEl) ratioEl.value = state.brollRatio || "medium";
+
+    const bindCreative = (el, key) => {
+      el?.addEventListener("change", () => {
+        state[key] = el.value;
+        emitChange();
+      });
+    };
+    bindCreative(ugcEl, "ugcSetting");
+    bindCreative(vfEl, "videoFormat");
+    bindCreative(brollEl, "brollSource");
+    bindCreative(ratioEl, "brollRatio");
+    bindCreative(hookEl, "hookStyle");
+    bindCreative(capEl, "captions");
+    bindCreative(musicEl, "backgroundMusic");
+    bindCreative(sfxEl, "editSfx");
+    return;
   }
 }
 

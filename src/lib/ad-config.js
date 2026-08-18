@@ -3,6 +3,18 @@
  * CLI e .env usam os mesmos IDs.
  */
 
+import {
+  AD_BROLL_SOURCES,
+  AD_CAPTION_STYLES,
+  AD_EDIT_SFX,
+  AD_HOOK_STYLES,
+  AD_POST_AUDIO,
+  AD_UGC_SETTINGS,
+  AD_VIDEO_FORMATS,
+  DEFAULT_CREATIVE_FORMAT,
+  resolveCreativeFormat,
+} from "./creative-format.js";
+
 export const AD_LANGUAGES = [
   { id: "pt", label: "Português" },
   { id: "en", label: "English" },
@@ -67,6 +79,18 @@ export const AD_STYLES = [
   { id: "ugc", label: "UGC talking head (mesma pessoa, fala à câmara)" },
 ];
 
+export {
+  AD_UGC_SETTINGS,
+  AD_VIDEO_FORMATS,
+  AD_BROLL_SOURCES,
+  AD_HOOK_STYLES,
+  AD_CAPTION_STYLES,
+  AD_POST_AUDIO,
+  AD_EDIT_SFX,
+  DEFAULT_CREATIVE_FORMAT,
+  resolveCreativeFormat,
+};
+
 export const LANGUAGE_VARIANTS = {
   pt: ["pt-BR", "pt-PT"],
   en: ["en", "en-US", "en-GB"],
@@ -83,6 +107,7 @@ export const DEFAULT_AD_CONFIG = {
   resolution: "1080p",
   tone: "amigavel",
   style: "ad",
+  ...DEFAULT_CREATIVE_FORMAT,
 };
 
 const LANGUAGE_LABELS = Object.fromEntries(
@@ -136,6 +161,7 @@ export function resolveAdConfig(overrides = {}) {
     tone: overrides.tone || process.env.AD_TONE || DEFAULT_AD_CONFIG.tone,
     style: overrides.style || process.env.AD_STYLE || DEFAULT_AD_CONFIG.style,
     languageVariant: resolveLanguageVariant(overrides),
+    ...resolveCreativeFormat(overrides),
   };
 
   if (!AD_STYLES.some((s) => s.id === config.style)) {

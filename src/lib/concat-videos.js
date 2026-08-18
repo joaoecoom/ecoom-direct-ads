@@ -34,9 +34,14 @@ async function normalizeClipForConcat(inputPath, outputPath) {
   return outputPath;
 }
 
-async function normalizeClipsForConcat(inputPaths, workDir) {
+async function normalizeClipsForConcat(inputPaths, workDir, onProgress) {
   const normalized = [];
   for (let i = 0; i < inputPaths.length; i++) {
+    onProgress?.({
+      message: `A normalizar clip ${i + 1}/${inputPaths.length}…`,
+      clipIndex: i + 1,
+      clipTotal: inputPaths.length,
+    });
     const out = path.join(workDir, `norm-${i}-${path.basename(inputPaths[i])}`);
     normalized.push(await normalizeClipForConcat(inputPaths[i], out));
   }
@@ -128,7 +133,7 @@ function buildAudioCrossfadeFilter(inputCount, d) {
 export async function concatenateVideosWithCrossfade(
   inputPaths,
   outputPath,
-  { crossfadeSeconds = 0.6, keepAudio = false } = {},
+  { crossfadeSeconds = 0.6, keepAudio = false, onProgress } = {},
 ) {
   if (inputPaths.length === 0) {
     throw new Error("Nenhum clip para juntar.");
@@ -154,7 +159,8 @@ export async function concatenateVideosWithCrossfade(
   const workDir = path.join(path.dirname(outputPath), `xfade-${timestampSlug()}`);
   let pathsToJoin = inputPaths;
   try {
-    pathsToJoin = await normalizeClipsForConcat(inputPaths, workDir);
+    onProgress?.({ message: `A normalizar ${inputPaths.length} clip(s)…`, clipIndex: 0, clipTotal: inputPaths.length });
+    pathsToJoin = await normalizeClipsForConcat(inputPaths, workDir, onProgress);
     durations.length = 0;
     for (const p of pathsToJoin) {
       durations.push(await getVideoDuration(p));
@@ -169,6 +175,8 @@ export async function concatenateVideosWithCrossfade(
   const inputs = pathsToJoin.flatMap((p) => ["-i", path.resolve(p)]);
   const videoFilter = buildVideoCrossfadeFilter(pathsToJoin.length, durations, dFinal);
   const useAudio = keepAudio && (await allClipsHaveAudio(inputPaths));
+
+  onProgress?.({ message: `FFmpeg crossfade (${pathsToJoin.length} clips)…` });
 
   async function runFfmpeg(filterComplex, includeAudio) {
     const args = [
@@ -221,12 +229,14 @@ export async function concatenateVideos(inputPaths, outputPath, options = {}) {
   const crossfade =
     options.crossfadeSeconds ??
     Number.parseFloat(process.env.VIDEO_CROSSFADE_SECONDS || "0");
+  const onProgress = options.onProgress;
 
   if (crossfade > 0 && inputPaths.length > 1) {
     try {
       return await concatenateVideosWithCrossfade(inputPaths, outputPath, {
         crossfadeSeconds: crossfade,
         keepAudio: options.keepAudio === true,
+        onProgress,
       });
     } catch (err) {
       console.log(`   ⚠️ Crossfade falhou (${err.message}), concat simples...\n`);

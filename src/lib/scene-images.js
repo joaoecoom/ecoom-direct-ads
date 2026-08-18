@@ -1,11 +1,125 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { generateImage, generateImageVariation, generateImageWithReferences } from "./imagen.js";
+import {
+  generateImage,
+  generateImageVariation,
+  generateImageWithReferences,
+} from "./imagen.js";
+import { buildIdentityReferencePrompt, buildHumanizedImagePrompt } from "./image-prompts.js";
 import { sleep } from "../config.js";
+
+function sceneBeat(scene) {
+  return scene.visualBeat || scene.imagePrompt || scene.role || "";
+}
+
+function buildScenePrompt(scene, storyboard, sceneIndex, sceneTotal, refNote = "") {
+  const brief = [storyboard.characterBrief, storyboard.settingBrief].filter(Boolean).join(". ");
+  const beat = sceneBeat(scene);
+  const type = scene.sceneType || "ugc";
+
+  if (type === "broll") {
+    return `${beat}. B-roll cutaway — NO talking head. Product/lifestyle/detail shot. Same color palette as UGC scenes.${refNote}`;
+  }
+  if (type === "react_overlay") {
+    return `${beat}. UGC react — person reacting to content on phone/screen overlay. Single frame.${refNote}`;
+  }
+
+  const prefix = brief
+    ? `${brief}. Scene ${sceneIndex + 1}/${sceneTotal} continuous UGC. ${beat}.`
+    : `${beat}. Scene ${sceneIndex + 1}/${sceneTotal}.`;
+  return `${prefix}${refNote}`.trim();
+}
+
+async function generateUgcSceneImage({
+  scene,
+  sceneIndex,
+  sceneTotal,
+  storyboard,
+  aspectRatio,
+  outputPath,
+  anchorPath,
+  previousPath,
+  avatarImagePath,
+  referenceImagePaths = [],
+  refNote = "",
+}) {
+  const prompt = buildScenePrompt(scene, storyboard, sceneIndex, sceneTotal, refNote);
+  const isBroll = (scene.sceneType || "ugc") === "broll";
+
+  if (sceneIndex === 0) {
+    if (avatarImagePath) {
+      const avatarPrompt = buildIdentityReferencePrompt(
+        `${prompt} Same person identity as reference avatar.`,
+      );
+      await generateImageVariation({
+        prompt: avatarPrompt,
+        referenceImagePath: avatarImagePath,
+        outputPath,
+        aspectRatio,
+        sceneIndex: 1,
+        sceneTotal,
+      });
+      return;
+    }
+    if (referenceImagePaths.length) {
+      await generateImageWithReferences({
+        prompt: buildHumanizedImagePrompt(prompt, { ugc: !isBroll }),
+        referenceImagePaths,
+        outputPath,
+        aspectRatio,
+        ugc: !isBroll,
+      });
+      return;
+    }
+    await generateImage({
+      prompt,
+      outputPath,
+      aspectRatio,
+      ugc: !isBroll,
+    });
+    return;
+  }
+
+  const identityAnchor = anchorPath || avatarImagePath;
+  const refPaths = [];
+  if (identityAnchor) refPaths.push(identityAnchor);
+  if (previousPath && previousPath !== identityAnchor) refPaths.push(previousPath);
+
+  if (refPaths.length >= 1) {
+    await generateImageWithReferences({
+      prompt: buildIdentityReferencePrompt(prompt, {
+        hasPreviousFrame: refPaths.length > 1,
+      }),
+      referenceImagePaths: refPaths.slice(0, 2),
+      outputPath,
+      aspectRatio,
+      ugc: !isBroll,
+    });
+    return;
+  }
+
+  if (previousPath) {
+    await generateImageVariation({
+      prompt: sceneBeat(scene),
+      referenceImagePath: previousPath,
+      outputPath,
+      aspectRatio,
+      sceneIndex: sceneIndex + 1,
+      sceneTotal,
+    });
+    return;
+  }
+
+  await generateImage({
+    prompt,
+    outputPath,
+    aspectRatio,
+    ugc: !isBroll,
+  });
+}
 
 /**
  * Gera imagens para todas as cenas do storyboard (UGC com continuidade).
- * @param {{ storyboard: object, adConfig: object, outputDir: string, onProgress?: Function }} params
  */
 export async function generateStoryboardImages({
   storyboard,
@@ -22,6 +136,7 @@ export async function generateStoryboardImages({
   const sceneTotal = storyboard.scenes.length;
   const results = [];
   let previousImagePath = null;
+  let anchorPath = avatarImagePath || null;
   const refNote =
     referenceImagePaths.length > 0
       ? " Include the referenced products/props naturally in frame."
@@ -40,47 +155,27 @@ export async function generateStoryboardImages({
       message: `Imagem ${i + 1}/${sceneTotal}: ${id}`,
     });
 
-    if (isUgc && i === 0 && avatarImagePath) {
-      const avatarPrompt = `${scene.imagePrompt}${refNote} Same person identity as reference avatar — new outfit/setting allowed but preserve face and body type.`;
-      await generateImageVariation({
-        prompt: avatarPrompt,
-        referenceImagePath: avatarImagePath,
-        outputPath: imageFile,
-        aspectRatio,
-        sceneIndex: 1,
+    if (isUgc) {
+      await generateUgcSceneImage({
+        scene,
+        sceneIndex: i,
         sceneTotal,
-      });
-    } else if (isUgc && i === 0 && referenceImagePaths.length) {
-      await generateImageWithReferences({
-        prompt: `${scene.imagePrompt}${refNote}`,
-        referenceImagePaths,
-        outputPath: imageFile,
+        storyboard,
         aspectRatio,
-        ugc: true,
-      });
-    } else if (isUgc && i === 0) {
-      await generateImage({
-        prompt: scene.imagePrompt,
         outputPath: imageFile,
-        aspectRatio,
-        ugc: true,
+        anchorPath,
+        previousPath: previousImagePath,
+        avatarImagePath,
+        referenceImagePaths: i === 0 ? referenceImagePaths : [],
+        refNote,
       });
-    } else if (isUgc && previousImagePath) {
-      await sleep(4000);
-      await generateImageVariation({
-        prompt: scene.visualBeat || scene.imagePrompt,
-        referenceImagePath: previousImagePath,
-        outputPath: imageFile,
-        aspectRatio,
-        sceneIndex: i + 1,
-        sceneTotal,
-      });
+      if (!anchorPath) anchorPath = imageFile;
     } else {
       await generateImage({
         prompt: scene.imagePrompt,
         outputPath: imageFile,
         aspectRatio,
-        ugc: isUgc,
+        ugc: false,
       });
     }
 
@@ -108,6 +203,8 @@ export async function regenerateSceneImage({
   sceneId,
   outputDir,
   referenceImagePath = null,
+  anchorImagePath = null,
+  previousImagePath = null,
 }) {
   await fs.mkdir(outputDir, { recursive: true });
   const aspectRatio = storyboard.aspectRatio || adConfig.aspectRatio;
@@ -121,28 +218,25 @@ export async function regenerateSceneImage({
   const imageFile = path.join(outputDir, `${sceneId}.png`);
   const sceneTotal = storyboard.scenes.length;
 
-  if (isUgc && sceneIndex === 0) {
-    await generateImage({
-      prompt: scene.imagePrompt,
-      outputPath: imageFile,
-      aspectRatio,
-      ugc: true,
-    });
-  } else if (isUgc && referenceImagePath) {
-    await generateImageVariation({
-      prompt: scene.visualBeat || scene.imagePrompt,
-      referenceImagePath,
-      outputPath: imageFile,
-      aspectRatio,
-      sceneIndex: sceneIndex + 1,
+  if (isUgc) {
+    await generateUgcSceneImage({
+      scene,
+      sceneIndex,
       sceneTotal,
+      storyboard,
+      aspectRatio,
+      outputPath: imageFile,
+      anchorPath: anchorImagePath,
+      previousPath: previousImagePath || (sceneIndex > 0 ? referenceImagePath : null),
+      avatarImagePath: anchorImagePath,
+      referenceImagePaths: [],
     });
   } else {
     await generateImage({
       prompt: scene.imagePrompt,
       outputPath: imageFile,
       aspectRatio,
-      ugc: isUgc,
+      ugc: false,
     });
   }
 

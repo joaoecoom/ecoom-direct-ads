@@ -356,12 +356,21 @@ async function runSceneImageJob(job, onProgress) {
   onProgress?.({ step: "image", message: `A regenerar imagem: ${sceneId}` });
 
   const sceneIndex = scenes.findIndex((s) => s.id === sceneId);
-  let referenceImagePath = null;
+  let previousImagePath = null;
+  let anchorImagePath = await resolveProjectAvatarPath(project);
+
   if (sceneIndex > 0) {
     const prevScene = scenes[sceneIndex - 1];
     if (prevScene?.imageAssetId) {
       const prevAsset = await getAsset(prevScene.imageAssetId);
-      if (prevAsset) referenceImagePath = resolveAssetFile(prevAsset);
+      if (prevAsset) previousImagePath = resolveAssetFile(prevAsset);
+    }
+    if (!anchorImagePath) {
+      const firstScene = scenes[0];
+      if (firstScene?.imageAssetId) {
+        const firstAsset = await getAsset(firstScene.imageAssetId);
+        if (firstAsset) anchorImagePath = resolveAssetFile(firstAsset);
+      }
     }
   }
 
@@ -370,7 +379,8 @@ async function runSceneImageJob(job, onProgress) {
     adConfig,
     sceneId,
     outputDir,
-    referenceImagePath,
+    anchorImagePath,
+    previousImagePath,
   });
 
   const asset = await createAsset({
@@ -596,6 +606,10 @@ async function runRebuildJob(job, onProgress) {
   for (const scene of scenes) {
     clipPaths.push(await resolveSceneVideoPath(scene));
   }
+
+  await safeUpdateJob(job.id, {
+    request: { ...job.request, clipCount: clipPaths.length },
+  });
 
   const outputDir = path.join(PROJECT_ROOT, "output", `project-${projectId}`, cid);
   const finalPath = path.join(outputDir, `export-${job.id}.mp4`);
