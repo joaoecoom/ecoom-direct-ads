@@ -109,6 +109,62 @@ function bindCanvasEvents() {
     if (e.target.closest(".canvas-attach-wrap")) return;
     menu.classList.add("hidden");
   });
+
+  window.addEventListener("ecoom:starting-point", (e) => {
+    if (e.detail?.projectId !== activeProjectId) return;
+    applyCanvasStartingPoint(e.detail.startingPoint, e.detail.action);
+  });
+}
+
+function openCanvasFilePicker(kind = "all") {
+  const input = document.getElementById("canvas-upload-input");
+  if (!input) return;
+  if (kind === "image") input.setAttribute("accept", "image/*");
+  else if (kind === "video") input.setAttribute("accept", "video/*");
+  else input.setAttribute("accept", "image/*,video/*");
+  input.click();
+}
+
+function applyCanvasStartingPoint(startingPoint, action) {
+  const resolved = action || startingPoint;
+  const project = getProject(activeProjectId);
+  const promptEl = document.getElementById("canvas-prompt");
+
+  if (project?.entryPrompt && promptEl && !promptEl.value) {
+    promptEl.value = project.entryPrompt;
+  }
+
+  switch (resolved) {
+    case "upload":
+      openCanvasFilePicker("all");
+      break;
+    case "image":
+      openCanvasFilePicker("image");
+      break;
+    case "video":
+      openCanvasFilePicker("video");
+      break;
+    case "generate-image":
+    case "generate_image":
+      state.mode = "image";
+      syncComposerUi();
+      promptEl?.focus();
+      break;
+    case "generate-video":
+    case "generate_video":
+      state.mode = "video";
+      syncComposerUi();
+      promptEl?.focus();
+      break;
+    case "prompt":
+      state.mode = "ads";
+      syncComposerUi();
+      revealAdEngine();
+      promptEl?.focus();
+      break;
+    default:
+      break;
+  }
 }
 
 function canvasCallbacks() {

@@ -52,13 +52,23 @@ export function getStartingPoint(id) {
   return STARTING_POINTS.find((s) => s.id === id) || STARTING_POINTS[0];
 }
 
-/** Default workspace tab per entry mode. Home is the Flow-style canvas. */
+/** Default workspace tab + action per entry mode (canvas is the home workspace). */
 export function getEntryRoute(startingPoint = "upload") {
   switch (startingPoint) {
+    case "upload":
+      return { tab: "canvas", action: "upload" };
+    case "image":
+      return { tab: "canvas", action: "image" };
+    case "video":
+      return { tab: "canvas", action: "video" };
+    case "generate_image":
+      return { tab: "canvas", action: "generate-image" };
+    case "generate_video":
+      return { tab: "canvas", action: "generate-video" };
     case "prompt":
-      return { tab: "create", action: null };
+      return { tab: "canvas", action: "prompt" };
     default:
-      return { tab: "canvas", action: null };
+      return { tab: "canvas", action: "upload" };
   }
 }
 

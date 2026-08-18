@@ -494,7 +494,8 @@ function renderProjectCreateMenu(projectId) {
   ).join("");
 
   dropdown.querySelectorAll("[data-inproject-sp]").forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
       dropdown.classList.add("hidden");
       void handleInProjectStartingPoint(btn.dataset.inprojectSp);
     };
@@ -504,7 +505,8 @@ function renderProjectCreateMenu(projectId) {
 async function handleInProjectStartingPoint(startingPoint) {
   if (!currentProjectId) return;
   const route = getEntryRoute(startingPoint);
-  await updateProject(currentProjectId, { startingPoint });
+
+  // UI + file picker must run synchronously (before await) to keep the user gesture.
   activeWorkspaceTab = route.tab;
   switchWorkspaceTab(route.tab);
   window.dispatchEvent(
@@ -517,6 +519,8 @@ async function handleInProjectStartingPoint(startingPoint) {
       },
     }),
   );
+
+  await updateProject(currentProjectId, { startingPoint });
 }
 
 function openNewProjectModal() {
@@ -606,7 +610,8 @@ document.getElementById("btn-project-create")?.addEventListener("click", (e) => 
   const dropdown = document.getElementById("project-create-dropdown");
   dropdown?.classList.toggle("hidden");
 });
-document.addEventListener("click", () => {
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".project-create-menu")) return;
   document.getElementById("project-create-dropdown")?.classList.add("hidden");
 });
 modal?.addEventListener("click", (e) => {
