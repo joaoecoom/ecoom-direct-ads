@@ -78,6 +78,7 @@ export function initBriefWizard({ container, onChange }) {
   els.container = container;
   renderShell();
   bindNav();
+  bindWizardEnterKey();
   renderStep();
   updateProgress();
 }
@@ -178,24 +179,35 @@ function goNext() {
   }
 }
 
-function bindStepKeyboard() {
-  if (!els.stepBody) return;
+function bindWizardEnterKey() {
+  if (!els.container || els.container.dataset.enterBound) return;
+  els.container.dataset.enterBound = "1";
 
-  if (els._keydownHandler) {
-    els.stepBody.removeEventListener("keydown", els._keydownHandler);
-  }
+  els.container.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.defaultPrevented) return;
 
-  els._keydownHandler = (e) => {
-    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+      const tag = e.target.tagName;
+      if (tag !== "TEXTAREA" && tag !== "SELECT") return;
 
-    const tag = e.target.tagName;
-    if (tag === "TEXTAREA" || tag === "SELECT") {
       e.preventDefault();
+      e.stopPropagation();
       goNext();
-    }
-  };
+    },
+    true,
+  );
+}
 
-  els.stepBody.addEventListener("keydown", els._keydownHandler);
+function attachFieldEnter(field) {
+  if (!field || field.dataset.enterBound) return;
+  field.dataset.enterBound = "1";
+  field.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    goNext();
+  });
 }
 
 function updateProgress() {
@@ -241,8 +253,8 @@ function renderStep() {
       state[step.key] = field.value;
       emitChange();
     });
+    attachFieldEnter(field);
     field?.focus();
-    bindStepKeyboard();
     return;
   }
 
@@ -273,7 +285,8 @@ function renderStep() {
       state.tone = toneEl.value;
       emitChange();
     });
-    bindStepKeyboard();
+    attachFieldEnter(styleEl);
+    attachFieldEnter(toneEl);
     return;
   }
 
@@ -328,9 +341,11 @@ function renderStep() {
       state.resolution = resEl.value;
       emitChange();
     });
+    attachFieldEnter(langEl);
+    attachFieldEnter(varEl);
+    attachFieldEnter(fmtEl);
+    attachFieldEnter(resEl);
   }
-
-  bindStepKeyboard();
 }
 
 function updateVariants(varEl, lang, selected) {
