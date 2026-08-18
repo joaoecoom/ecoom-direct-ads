@@ -4,6 +4,12 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import {
+  emptyCreative,
+  migrateCreatives,
+  mirrorProjectFromCreative,
+  resolveCreative,
+} from "./creative-store.js";
+import {
   statusAfterImageChange,
   statusAfterMotionPromptChange,
   statusAfterVideoChange,
@@ -32,22 +38,46 @@ function projectPath(id) {
   return path.join(PROJECTS_DIR, `${id}.json`);
 }
 
+function normalizeScenes(scenes, hasExport = false) {
+  return (scenes || []).map((s) => normalizeScene(s, hasExport));
+}
+
 function normalizeProject(raw) {
-  const latestExport = raw.latestExport || null;
-  return {
+  const creatives = migrateCreatives(raw);
+  const activeCreativeId =
+    raw.activeCreativeId || creatives[creatives.length - 1]?.id || null;
+
+  const base = {
     ...raw,
     settings: { ...DEFAULT_PROJECT_SETTINGS, ...raw.settings },
     jobIds: raw.jobIds || [],
-    creatives: raw.creatives || [],
-    scenes: (raw.scenes || []).map((s) => normalizeScene(s, Boolean(latestExport))),
+    creatives: creatives.map((c) => ({
+      ...c,
+      scenes: normalizeScenes(c.scenes, Boolean(c.latestExport)),
+    })),
+    activeCreativeId,
     assetIds: raw.assetIds || [],
-    blueprintPath: raw.blueprintPath || null,
-    blueprint: raw.blueprint || null,
-    latestExport,
-    timelineStatus: raw.timelineStatus || "pending",
-    latestCopy: raw.latestCopy || null,
     avatar: raw.avatar || null,
     referenceAssetIds: raw.referenceAssetIds || [],
+  };
+
+  return mirrorProjectFromCreative(base);
+}
+
+function serializeProject(project) {
+  return {
+    id: project.id,
+    name: project.name,
+    masterPrompt: project.masterPrompt,
+    settings: project.settings,
+    jobIds: project.jobIds,
+    creatives: project.creatives,
+    activeCreativeId: project.activeCreativeId,
+    avatar: project.avatar,
+    referenceAssetIds: project.referenceAssetIds,
+    assetIds: project.assetIds,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
   };
 }
 
@@ -97,9 +127,13 @@ function normalizeScene(scene, projectHasExport = false) {
   };
 }
 
-export async function setProjectCopy(projectId, copy, copyPath = null) {
-  return updateProject(projectId, {
-    latestCopy: {
+export async function setProjectCopy(projectId, copy, copyPath = null, creativeId = null) {
+  const project = await getProject(projectId);
+  const cid = creativeId || project.activeCreativeId;
+  if (!cid) throw new Error("Nenhum vídeo activo — cria um vídeo primeiro.");
+
+  return updateCreative(projectId, cid, {
+    copy: {
       ...copy,
       copyPath,
       savedAt: new Date().toISOString(),
@@ -107,7 +141,14 @@ export async function setProjectCopy(projectId, copy, copyPath = null) {
   });
 }
 
-export async function applyBlueprint(projectId, { storyboardPath, storyboard }) {
+export async function applyBlueprint(
+  projectId,
+  { storyboardPath, storyboard, creativeId = null },
+) {
+  const project = await getProject(projectId);
+  const cid = creativeId || project.activeCreativeId;
+  if (!cid) throw new Error("Nenhum vídeo activo — cria um vídeo primeiro.");
+
   const sceneCount = storyboard.scenes?.length || 0;
   const clipDuration =
     storyboard.clipDurationSeconds ||
@@ -115,33 +156,45 @@ export async function applyBlueprint(projectId, { storyboardPath, storyboard }) 
     storyboard.durationSeconds ||
     8;
 
-  return updateProject(projectId, {
+  const blueprint = {
+    title: storyboard.title,
+    hook: storyboard.hook,
+    sceneCount,
+    clipDurationSeconds: clipDuration,
+    totalDurationSeconds: storyboard.totalDurationSeconds || sceneCount * clipDuration,
+  };
+
+  await updateCreative(projectId, cid, {
+    title: storyboard.title || resolveCreative(project, cid)?.title,
     blueprintPath: storyboardPath,
-    blueprint: {
-      title: storyboard.title,
-      hook: storyboard.hook,
-      sceneCount,
-      clipDurationSeconds: clipDuration,
-      totalDurationSeconds: storyboard.totalDurationSeconds || sceneCount * clipDuration,
-    },
+    blueprint,
+    scenes: storyboardToScenes(storyboard),
+    timelineStatus: "pending",
+    latestExport: null,
+  });
+
+  return updateProject(projectId, {
     settings: {
       sceneCount,
       clipDurationSeconds: clipDuration,
       totalDurationSeconds: storyboard.totalDurationSeconds || sceneCount * clipDuration,
     },
-    scenes: storyboardToScenes(storyboard),
   });
 }
 
-export async function updateProjectScene(projectId, sceneId, patch) {
+export async function updateProjectScene(projectId, sceneId, patch, creativeId = null) {
   const project = await getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} não encontrado`);
-  const scenes = project.scenes.map((s) => {
+  const cid = creativeId || project.activeCreativeId;
+  const creative = resolveCreative(project, cid);
+  if (!creative) throw new Error("Nenhum vídeo activo.");
+
+  const scenes = creative.scenes.map((s) => {
     if (s.id !== sceneId) return s;
 
     let status = s.status;
     if (patch.motionPrompt !== undefined && patch.motionPrompt !== s.motionPrompt) {
-      status = statusAfterMotionPromptChange(s, Boolean(project.latestExport));
+      status = statusAfterMotionPromptChange(s, Boolean(creative.latestExport));
     }
     if (patch.status) {
       status = { ...status, ...patch.status };
@@ -151,54 +204,76 @@ export async function updateProjectScene(projectId, sceneId, patch) {
     return { ...s, ...restPatch, status };
   });
 
-  const updated = await updateProject(projectId, { scenes });
+  await updateCreative(projectId, cid, { scenes });
   if (patch.motionPrompt !== undefined) {
-    const scene = project.scenes.find((s) => s.id === sceneId);
+    const scene = creative.scenes.find((s) => s.id === sceneId);
     if (scene && patch.motionPrompt !== scene.motionPrompt) {
-      await markTimelineNeedsRebuild(projectId);
+      await markTimelineNeedsRebuild(projectId, cid);
     }
   }
-  return updated;
+  return getProject(projectId);
 }
 
-export async function registerSceneImageAsset(projectId, sceneId, assetId) {
+export async function registerSceneImageAsset(
+  projectId,
+  sceneId,
+  assetId,
+  creativeId = null,
+) {
   const project = await getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} não encontrado`);
-  const scene = project.scenes.find((s) => s.id === sceneId);
+  const creative = resolveCreative(project, creativeId);
+  const scene = creative?.scenes?.find((s) => s.id === sceneId);
   if (!scene) throw new Error(`Cena ${sceneId} não encontrada`);
 
   const imageChanged = scene.imageAssetId && scene.imageAssetId !== assetId;
   const imageVersions = [...new Set([...(scene.imageVersions || []), assetId])];
 
-  await updateProjectScene(projectId, sceneId, {
-    imageAssetId: assetId,
-    imageVersions,
-    status: imageChanged
-      ? statusAfterImageChange(scene, Boolean(project.latestExport))
-      : { ...scene.status, image: "done" },
-  });
+  await updateProjectScene(
+    projectId,
+    sceneId,
+    {
+      imageAssetId: assetId,
+      imageVersions,
+      status: imageChanged
+        ? statusAfterImageChange(scene, Boolean(creative.latestExport))
+        : { ...scene.status, image: "done" },
+    },
+    creative?.id,
+  );
 
-  if (imageChanged && (scene.videoAssetId || project.latestExport)) {
-    await markTimelineNeedsRebuild(projectId);
+  if (imageChanged && (scene.videoAssetId || creative.latestExport)) {
+    await markTimelineNeedsRebuild(projectId, creative.id);
   }
   return getProject(projectId);
 }
 
-export async function registerSceneVideoAsset(projectId, sceneId, assetId) {
+export async function registerSceneVideoAsset(
+  projectId,
+  sceneId,
+  assetId,
+  creativeId = null,
+) {
   const project = await getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} não encontrado`);
-  const scene = project.scenes.find((s) => s.id === sceneId);
+  const creative = resolveCreative(project, creativeId);
+  const scene = creative?.scenes?.find((s) => s.id === sceneId);
   if (!scene) throw new Error(`Cena ${sceneId} não encontrada`);
 
   const videoVersions = [...new Set([...(scene.videoVersions || []), assetId])];
 
-  await updateProjectScene(projectId, sceneId, {
-    videoAssetId: assetId,
-    videoVersions,
-    status: statusAfterVideoChange(scene, Boolean(project.latestExport)),
-  });
+  await updateProjectScene(
+    projectId,
+    sceneId,
+    {
+      videoAssetId: assetId,
+      videoVersions,
+      status: statusAfterVideoChange(scene, Boolean(creative.latestExport)),
+    },
+    creative?.id,
+  );
 
-  await markTimelineNeedsRebuild(projectId);
+  await markTimelineNeedsRebuild(projectId, creative.id);
   return getProject(projectId);
 }
 
@@ -216,26 +291,33 @@ export async function activateSceneAssetVersion(projectId, sceneId, type, assetI
   return registerSceneVideoAsset(projectId, sceneId, assetId);
 }
 
-export async function getProjectScene(projectId, sceneId) {
+export async function getProjectScene(projectId, sceneId, creativeId = null) {
   const project = await getProject(projectId);
-  const scene = project?.scenes?.find((s) => s.id === sceneId);
+  const creative = resolveCreative(project, creativeId);
+  const scene = creative?.scenes?.find((s) => s.id === sceneId);
   if (!scene) return null;
-  return { project, scene };
+  return { project: mirrorProjectFromCreative({ ...project, activeCreativeId: creative.id }), scene };
 }
 
-/** @deprecated use registerSceneImageAsset */
 export async function linkAssetToScene(projectId, sceneId, assetId) {
   return registerSceneImageAsset(projectId, sceneId, assetId);
 }
 
-/** @deprecated use registerSceneVideoAsset */
 export async function linkVideoAssetToScene(projectId, sceneId, assetId) {
   return registerSceneVideoAsset(projectId, sceneId, assetId);
 }
 
-export async function setProjectExport(projectId, { assetId, jobId, finalVideo }) {
+export async function setProjectExport(
+  projectId,
+  { assetId, jobId, finalVideo },
+  creativeId = null,
+) {
   const project = await getProject(projectId);
-  const scenes = (project?.scenes || []).map((s) => ({
+  const cid = creativeId || project.activeCreativeId;
+  const creative = resolveCreative(project, cid);
+  if (!creative) throw new Error("Nenhum vídeo activo.");
+
+  const scenes = creative.scenes.map((s) => ({
     ...s,
     status: {
       ...s.status,
@@ -245,7 +327,7 @@ export async function setProjectExport(projectId, { assetId, jobId, finalVideo }
     },
   }));
 
-  return updateProject(projectId, {
+  return updateCreative(projectId, cid, {
     timelineStatus: "ready",
     scenes,
     latestExport: {
@@ -257,12 +339,10 @@ export async function setProjectExport(projectId, { assetId, jobId, finalVideo }
   });
 }
 
-export async function markTimelineNeedsRebuild(projectId) {
+export async function markTimelineNeedsRebuild(projectId, creativeId = null) {
   const project = await getProject(projectId);
-  if (!project?.latestExport) {
-    return updateProject(projectId, { timelineStatus: "needs_rebuild" });
-  }
-  return updateProject(projectId, { timelineStatus: "needs_rebuild" });
+  const cid = creativeId || project.activeCreativeId;
+  return updateCreative(projectId, cid, { timelineStatus: "needs_rebuild" });
 }
 
 export async function addProjectAssetId(projectId, assetId) {
@@ -284,12 +364,15 @@ export async function createProject(payload = {}) {
     settings: { ...DEFAULT_PROJECT_SETTINGS, ...payload.settings },
     jobIds: [],
     creatives: [],
-    latestCreative: null,
+    activeCreativeId: null,
+    avatar: null,
+    referenceAssetIds: [],
+    assetIds: [],
     createdAt: now,
     updatedAt: now,
   };
   await fs.writeFile(projectPath(project.id), JSON.stringify(project, null, 2));
-  return project;
+  return normalizeProject(project);
 }
 
 export async function getProject(id) {
@@ -305,20 +388,80 @@ export async function updateProject(id, patch = {}) {
   const project = await getProject(id);
   if (!project) throw new Error(`Project ${id} não encontrado`);
 
-  const next = {
+  let creatives = patch.creatives ?? project.creatives;
+  let activeCreativeId = patch.activeCreativeId ?? project.activeCreativeId;
+
+  const legacyCreativePatch = {};
+  if (patch.scenes !== undefined) legacyCreativePatch.scenes = patch.scenes;
+  if (patch.blueprintPath !== undefined) legacyCreativePatch.blueprintPath = patch.blueprintPath;
+  if (patch.blueprint !== undefined) legacyCreativePatch.blueprint = patch.blueprint;
+  if (patch.latestExport !== undefined) legacyCreativePatch.latestExport = patch.latestExport;
+  if (patch.timelineStatus !== undefined) legacyCreativePatch.timelineStatus = patch.timelineStatus;
+  if (patch.latestCopy !== undefined) legacyCreativePatch.copy = patch.latestCopy;
+
+  if (Object.keys(legacyCreativePatch).length && activeCreativeId) {
+    creatives = creatives.map((c) =>
+      c.id === activeCreativeId
+        ? { ...c, ...legacyCreativePatch, updatedAt: new Date().toISOString() }
+        : c,
+    );
+  }
+
+  const next = serializeProject({
     ...project,
     ...patch,
-    settings: patch.settings
-      ? { ...project.settings, ...patch.settings }
-      : project.settings,
+    settings: patch.settings ? { ...project.settings, ...patch.settings } : project.settings,
     jobIds: patch.jobIds ?? project.jobIds,
-    creatives: patch.creatives ?? project.creatives,
-    latestCreative: patch.latestCreative ?? project.latestCreative,
+    creatives,
+    activeCreativeId,
+    avatar: patch.avatar ?? project.avatar,
+    referenceAssetIds: patch.referenceAssetIds ?? project.referenceAssetIds,
+    assetIds: patch.assetIds ?? project.assetIds,
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   await fs.writeFile(projectPath(id), JSON.stringify(next, null, 2));
-  return next;
+  return normalizeProject(next);
+}
+
+export async function updateCreative(projectId, creativeId, patch) {
+  const project = await getProject(projectId);
+  const cid = creativeId || project.activeCreativeId;
+  if (!cid) throw new Error("Nenhum vídeo activo.");
+
+  const creatives = project.creatives.map((c) => {
+    if (c.id !== cid) return c;
+    return { ...c, ...patch, updatedAt: new Date().toISOString() };
+  });
+
+  return updateProject(projectId, { creatives, activeCreativeId: cid });
+}
+
+export async function createCreative(projectId, { title } = {}) {
+  const project = await getProject(projectId);
+  if (!project) throw new Error("Projecto não encontrado");
+  const creative = emptyCreative({
+    title: title || `Vídeo ${project.creatives.length + 1}`,
+    index: project.creatives.length + 1,
+  });
+  return updateProject(projectId, {
+    creatives: [...project.creatives, creative],
+    activeCreativeId: creative.id,
+  });
+}
+
+export async function setActiveCreative(projectId, creativeId) {
+  const project = await getProject(projectId);
+  if (!project.creatives.some((c) => c.id === creativeId)) {
+    throw new Error("Vídeo não encontrado neste projecto.");
+  }
+  return updateProject(projectId, { activeCreativeId: creativeId });
+}
+
+export async function ensureActiveCreative(projectId, { title } = {}) {
+  const project = await getProject(projectId);
+  if (resolveCreative(project)) return project;
+  return createCreative(projectId, { title });
 }
 
 export async function deleteProject(id) {
@@ -359,23 +502,23 @@ export async function listProjects(limit = 100) {
   return projects.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export async function linkJobToProject(projectId, jobId, creativeMeta = {}) {
+export async function linkJobToProject(projectId, jobId, creativeMeta = {}, creativeId = null) {
   const project = await getProject(projectId);
   if (!project) return null;
 
-  const jobIds = project.jobIds.includes(jobId)
-    ? project.jobIds
-    : [...project.jobIds, jobId];
+  const cid = creativeId || project.activeCreativeId;
+  const jobIds = project.jobIds.includes(jobId) ? project.jobIds : [...project.jobIds, jobId];
 
-  const creative = {
-    jobId,
-    ...creativeMeta,
-    linkedAt: new Date().toISOString(),
-  };
-
-  return updateProject(projectId, {
-    jobIds,
-    latestCreative: creative,
-    creatives: [...project.creatives, creative],
+  const creatives = project.creatives.map((c) => {
+    if (c.id !== cid) return c;
+    const cJobIds = c.jobIds?.includes(jobId) ? c.jobIds : [...(c.jobIds || []), jobId];
+    return {
+      ...c,
+      jobIds: cJobIds,
+      ...creativeMeta,
+      updatedAt: new Date().toISOString(),
+    };
   });
+
+  return updateProject(projectId, { jobIds, creatives });
 }

@@ -28,16 +28,20 @@ import {
 import {
   activateSceneAssetVersion,
   addProjectAssetId,
+  createCreative,
   createProject,
   deleteProject,
   duplicateProject,
+  ensureActiveCreative,
   getProject,
   getProjectScene,
   linkAssetToScene,
   listProjects,
+  setActiveCreative,
   updateProject,
   updateProjectScene,
 } from "./project-store.js";
+import { listCreativeSummaries, resolveCreative } from "./creative-store.js";
 import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
 import { pickAdOverrides } from "./ad-overrides.js";
 import { buildTimelineView } from "./timeline.js";
@@ -45,6 +49,18 @@ import { buildExportView } from "./exports.js";
 import { syncGenerationAssetsToProject } from "./project-sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+async function resolveJobCreativeId(project, req) {
+  if (req.body?.creativeId) return req.body.creativeId;
+  if (project.activeCreativeId) return project.activeCreativeId;
+  const updated = await ensureActiveCreative(project.id);
+  return updated.activeCreativeId;
+}
+
+function activeCreativeHasBlueprint(project) {
+  const creative = resolveCreative(project);
+  return Boolean(creative?.blueprintPath);
+}
 const ROOT = path.resolve(__dirname, "..");
 const PORT = Number.parseInt(process.env.PORT || "8787", 10);
 const FRONTEND_URL = process.env.FRONTEND_URL || "*";
@@ -161,10 +177,8 @@ app.get("/api/projects/:id/storyboard", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
 
-  const storyboardPath =
-    project.blueprintPath ||
-    project.latestCreative?.storyboardPath ||
-    project.creatives?.slice(-1)[0]?.storyboardPath;
+  const creative = resolveCreative(project, req.query?.creativeId);
+  const storyboardPath = creative?.blueprintPath;
 
   if (!storyboardPath || !fs.existsSync(storyboardPath)) {
     return res.status(404).json({ error: "Storyboard ainda não disponível" });
@@ -174,11 +188,44 @@ app.get("/api/projects/:id/storyboard", async (req, res) => {
   res.json(JSON.parse(raw));
 });
 
+app.get("/api/projects/:id/creatives", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  const assets = await listAssetsByProject(req.params.id);
+  const assetById = Object.fromEntries(assets.map((a) => [a.id, a]));
+  res.json({
+    activeCreativeId: project.activeCreativeId,
+    creatives: listCreativeSummaries(project, assetById),
+  });
+});
+
+app.post("/api/projects/:id/creatives", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  const title = req.body?.title?.trim() || `Vídeo ${project.creatives.length + 1}`;
+  const updated = await createCreative(req.params.id, { title });
+  res.status(201).json({
+    creativeId: updated.activeCreativeId,
+    creatives: listCreativeSummaries(updated),
+  });
+});
+
+app.post("/api/projects/:id/creatives/:creativeId/activate", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+  const updated = await setActiveCreative(req.params.id, req.params.creativeId);
+  res.json({ activeCreativeId: updated.activeCreativeId, project: updated });
+});
+
 app.get("/api/projects/:id/assets", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
   const assets = await listAssetsByProject(req.params.id);
-  res.json({ assets, scenes: project.scenes || [] });
+  res.json({
+    assets,
+    scenes: project.scenes || [],
+    activeCreativeId: project.activeCreativeId,
+  });
 });
 
 app.post("/api/projects/:id/assets", async (req, res) => {
@@ -246,6 +293,7 @@ app.post("/api/projects/:id/blueprint", async (req, res) => {
   const overrides = { ...project.settings, ...req.body?.overrides };
   const wizard = req.body?.wizard || {};
   const approvedCopy = req.body?.approvedCopy || null;
+  const creativeId = await resolveJobCreativeId(project, req);
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
@@ -257,6 +305,7 @@ app.post("/api/projects/:id/blueprint", async (req, res) => {
       wizard,
       approvedCopy,
       projectId: req.params.id,
+      creativeId,
     },
   });
 
@@ -273,6 +322,7 @@ app.post("/api/projects/:id/copy", async (req, res) => {
 
   const overrides = { ...project.settings, ...req.body?.overrides };
   const wizard = req.body?.wizard || {};
+  const creativeId = await resolveJobCreativeId(project, req);
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
@@ -283,6 +333,7 @@ app.post("/api/projects/:id/copy", async (req, res) => {
       overrides,
       wizard,
       projectId: req.params.id,
+      creativeId,
     },
   });
 
@@ -294,15 +345,16 @@ app.post("/api/projects/:id/images/generate", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
 
-  if (!project.blueprintPath && !project.latestCreative?.storyboardPath) {
+  if (!activeCreativeHasBlueprint(project)) {
     return res.status(400).json({ error: "Gera o blueprint primeiro" });
   }
 
+  const creativeId = project.activeCreativeId;
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
     type: "images",
-    request: { type: "images", projectId: req.params.id, overrides: project.settings },
+    request: { type: "images", projectId: req.params.id, overrides: project.settings, creativeId },
   });
 
   enqueue(id);
@@ -346,7 +398,7 @@ app.post("/api/projects/:id/videos/generate", async (req, res) => {
   await createJob({
     id,
     type: "videos",
-    request: { type: "videos", projectId: req.params.id },
+    request: { type: "videos", projectId: req.params.id, creativeId: project.activeCreativeId },
   });
 
   enqueue(id);
@@ -483,7 +535,7 @@ app.post("/api/projects/:id/timeline/rebuild", async (req, res) => {
   await createJob({
     id,
     type: "rebuild",
-    request: { type: "rebuild", projectId: req.params.id },
+    request: { type: "rebuild", projectId: req.params.id, creativeId: project.activeCreativeId },
   });
 
   enqueue(id);
@@ -545,16 +597,31 @@ app.get("/api/jobs/:id/copy", async (req, res) => {
 });
 
 app.post("/api/jobs", async (req, res) => {
-  const { offer, projectId, wizard, approvedCopy, ...rawOverrides } = req.body || {};
+  const {
+    offer,
+    projectId,
+    wizard,
+    approvedCopy,
+    creativeId: bodyCreativeId,
+    ...rawOverrides
+  } = req.body || {};
   if (!offer?.trim()) {
     return res.status(400).json({ error: "Campo 'offer' (brief) é obrigatório." });
   }
+
+  let creativeId = bodyCreativeId || null;
 
   if (projectId) {
     const project = await getProject(projectId);
     if (!project) {
       return res.status(404).json({ error: "Projecto não encontrado" });
     }
+  }
+
+  if (projectId) {
+    await ensureActiveCreative(projectId);
+    const fresh = await getProject(projectId);
+    creativeId = creativeId || fresh.activeCreativeId;
   }
 
   const overrides = pickAdOverrides(rawOverrides);
@@ -569,6 +636,7 @@ app.post("/api/jobs", async (req, res) => {
       wizard: wizard || null,
       approvedCopy: approvedCopy || null,
       projectId: projectId || null,
+      creativeId: creativeId || null,
     },
   });
 

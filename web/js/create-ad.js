@@ -1,6 +1,7 @@
 import {
   animateAllVideos,
   assetFileUrl,
+  createCreative,
   fetchConfig,
   fetchJobCopy,
   fetchProjectExports,
@@ -209,6 +210,17 @@ async function resolveActiveProject() {
   return project;
 }
 
+async function ensureActiveVideoCreative(project) {
+  if (project.activeCreativeId && project.creatives?.some((c) => c.id === project.activeCreativeId)) {
+    return project;
+  }
+  if (project.creatives?.length) {
+    return project;
+  }
+  await createCreative(project.id);
+  return (await resolveActiveProject()) || project;
+}
+
 async function onGenerateCopy() {
   hideError();
   const brief = getBrief();
@@ -229,6 +241,7 @@ async function onGenerateCopy() {
 
   try {
     const project = await resolveActiveProject();
+    await ensureActiveVideoCreative(project);
     const wizard = getWizardState();
     const settings = wizardToSettings(wizard, config);
     const data = await generateCopy(project.id, {
@@ -308,6 +321,7 @@ async function onGenerateVideo() {
 
   try {
     const project = await resolveActiveProject();
+    await ensureActiveVideoCreative(project);
     const wizard = getWizardState();
     const settings = wizardToSettings(wizard, config);
 

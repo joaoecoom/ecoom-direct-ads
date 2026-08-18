@@ -114,6 +114,33 @@ export async function syncJobToProject(projectId, jobId) {
   return data;
 }
 
+export async function fetchProjectCreatives(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/creatives`);
+  if (!res.ok) throw new Error("Creatives indisponíveis");
+  return res.json();
+}
+
+export async function createCreative(projectId, body = {}) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/creatives`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao criar vídeo");
+  return data;
+}
+
+export async function activateCreative(projectId, creativeId) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/creatives/${creativeId}/activate`,
+    { method: "POST" },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao activar vídeo");
+  return data;
+}
+
 export async function fetchProjectAssets(projectId) {
   const res = await fetch(`${API_URL}/api/projects/${projectId}/assets`);
   if (!res.ok) throw new Error("Assets indisponíveis");

@@ -31,31 +31,18 @@ function resolveClipPath(runId, storyboard, index, explicitPaths = []) {
   return candidates.find((p) => fs.existsSync(p)) || null;
 }
 
-
-async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order }) {
-  const asset = await createAsset({
-    projectId,
-    sceneId,
-    type: "video",
-    source: "generated",
-    prompt,
-    sourcePath: clipPath,
-    ext: "mp4",
-    metadata: { jobId, order },
-  });
-  await registerSceneVideoAsset(projectId, sceneId, asset.id);
-  await addProjectAssetId(projectId, asset.id);
-  return asset;
-}
-
 /**
  * Liga imagens, clips e export de um full_ad (ou job equivalente) ao projecto.
  */
-export async function syncGenerationAssetsToProject(projectId, jobId, result) {
+export async function syncGenerationAssetsToProject(projectId, jobId, result, creativeId = null) {
   const { storyboard, finalVideo, runId = jobId } = result;
   if (!storyboard?.scenes?.length) {
     throw new Error("Storyboard em falta no resultado do job.");
   }
+
+  const project = await getProject(projectId);
+  const cid = creativeId || project.activeCreativeId;
+  if (!cid) throw new Error("Nenhum vídeo activo.");
 
   const assetsRunDir =
     result.assetsRunDir || path.join(PROJECT_ROOT, "assets", `run-${runId}`);
@@ -79,9 +66,9 @@ export async function syncGenerationAssetsToProject(projectId, jobId, result) {
       source: "generated",
       prompt: scene.imagePrompt || scene.visualBeat || "",
       sourcePath: imagePath,
-      metadata: { order: i, jobId, syncedFromJob: true },
+      metadata: { order: i, jobId, syncedFromJob: true, creativeId: cid },
     });
-    await registerSceneImageAsset(projectId, sceneId, asset.id);
+    await registerSceneImageAsset(projectId, sceneId, asset.id, cid);
     await addProjectAssetId(projectId, asset.id);
     imageAssetIds.push(asset.id);
   }
@@ -92,14 +79,18 @@ export async function syncGenerationAssetsToProject(projectId, jobId, result) {
     const clipPath = resolveClipPath(runId, storyboard, i, sceneClipPaths);
     if (!clipPath) continue;
 
-    await registerVideoAsset({
+    const asset = await createAsset({
       projectId,
       sceneId,
-      clipPath,
+      type: "video",
+      source: "generated",
       prompt: scene.motionPrompt || scene.visualBeat || "",
-      jobId,
-      order: i,
+      sourcePath: clipPath,
+      ext: "mp4",
+      metadata: { jobId, order: i, creativeId: cid },
     });
+    await registerSceneVideoAsset(projectId, sceneId, asset.id, cid);
+    await addProjectAssetId(projectId, asset.id);
   }
 
   if (finalVideo && fs.existsSync(finalVideo)) {
@@ -110,14 +101,18 @@ export async function syncGenerationAssetsToProject(projectId, jobId, result) {
       prompt: storyboard.title || "Final export",
       sourcePath: finalVideo,
       ext: "mp4",
-      metadata: { export: true, jobId, syncedFromJob: true },
+      metadata: { export: true, jobId, syncedFromJob: true, creativeId: cid },
     });
     await addProjectAssetId(projectId, exportAsset.id);
-    await setProjectExport(projectId, {
-      assetId: exportAsset.id,
-      jobId,
-      finalVideo,
-    });
+    await setProjectExport(
+      projectId,
+      {
+        assetId: exportAsset.id,
+        jobId,
+        finalVideo,
+      },
+      cid,
+    );
   }
 
   const anchorImageAssetId = imageAssetIds[0] || null;
@@ -132,11 +127,13 @@ export async function syncGenerationAssetsToProject(projectId, jobId, result) {
     });
   }
 
-  const project = await getProject(projectId);
+  const refreshed = await getProject(projectId);
+  const creative = refreshed.creatives.find((c) => c.id === cid);
   return {
     imageCount: imageAssetIds.length,
-    clipCount: project?.scenes?.filter((s) => s.videoAssetId).length || 0,
-    exportReady: Boolean(project?.latestExport),
+    clipCount: creative?.scenes?.filter((s) => s.videoAssetId).length || 0,
+    exportReady: Boolean(creative?.latestExport),
     avatarSet: Boolean(anchorImageAssetId),
+    creativeId: cid,
   };
 }

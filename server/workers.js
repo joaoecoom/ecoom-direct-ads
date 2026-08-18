@@ -8,30 +8,34 @@ import { createAsset, getAsset, resolveAssetFile } from "./asset-store.js";
 import {
   addProjectAssetId,
   applyBlueprint,
+  ensureActiveCreative,
   getProject,
   linkAssetToScene,
   linkJobToProject,
-  linkVideoAssetToScene,
+  registerSceneImageAsset,
+  registerSceneVideoAsset,
   setProjectCopy,
   setProjectExport,
+  updateCreative,
   updateProject,
   updateProjectScene,
 } from "./project-store.js";
 import { pickAdOverrides } from "./ad-overrides.js";
 import { rebuildTimelineVideo } from "../src/lib/timeline-rebuild.js";
+import { resolveCreative } from "./creative-store.js";
 import { resolveSceneVideoPath } from "./timeline.js";
 import { syncGenerationAssetsToProject } from "./project-sync.js";
 
-export function loadStoryboardForProject(project) {
-  const storyboardPath =
-    project.blueprintPath || project.latestCreative?.storyboardPath;
+export function loadStoryboardForProject(project, creativeId = null) {
+  const creative = resolveCreative(project, creativeId);
+  const storyboardPath = creative?.blueprintPath;
 
   if (!storyboardPath || !fs.existsSync(storyboardPath)) {
     throw new Error("Blueprint/storyboard em falta. Gera o blueprint primeiro.");
   }
 
   const storyboard = JSON.parse(fs.readFileSync(storyboardPath, "utf8"));
-  return { storyboard, storyboardPath };
+  return { storyboard, storyboardPath, creativeId: creative?.id };
 }
 
 export async function runJob(job, onProgress) {
@@ -83,7 +87,7 @@ async function resolveProjectReferencePaths(project) {
   return paths;
 }
 
-async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order }) {
+async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order, creativeId }) {
   const asset = await createAsset({
     projectId,
     sceneId,
@@ -94,14 +98,17 @@ async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId,
     ext: "mp4",
     metadata: { jobId, order },
   });
-  await linkVideoAssetToScene(projectId, sceneId, asset.id);
+  await registerSceneVideoAsset(projectId, sceneId, asset.id, creativeId);
   await addProjectAssetId(projectId, asset.id);
   return asset;
 }
 
 async function runCopyJob(job, onProgress) {
-  const { offer, overrides, projectId, wizard } = job.request;
+  const { offer, overrides, projectId, wizard, creativeId } = job.request;
   if (!projectId) throw new Error("projectId obrigatório para copy");
+  await ensureActiveCreative(projectId);
+  const project = await getProject(projectId);
+  const cid = creativeId || project.activeCreativeId;
 
   const result = await runAdGeneration({
     offer,
@@ -112,16 +119,21 @@ async function runCopyJob(job, onProgress) {
     onProgress,
   });
 
-  await setProjectCopy(projectId, result.copy, result.copyPath);
+  await setProjectCopy(projectId, result.copy, result.copyPath, cid);
 
-  return { copy: result.copy, copyPath: result.copyPath };
+  return { copy: result.copy, copyPath: result.copyPath, creativeId: cid };
 }
 
 async function runFullAdJob(job, onProgress) {
-  const { offer, overrides = {}, projectId, approvedCopy, wizard } = job.request;
+  const { offer, overrides = {}, projectId, approvedCopy, wizard, creativeId } = job.request;
   let copy = approvedCopy;
   if (!copy && projectId) {
-    copy = (await getProject(projectId))?.latestCopy;
+    const project = await getProject(projectId);
+    copy = resolveCreative(project, creativeId)?.copy || project?.latestCopy;
+  }
+
+  if (projectId) {
+    await ensureActiveCreative(projectId);
   }
 
   await onProgress?.({ step: "config", message: "A preparar pipeline completo..." });
@@ -136,22 +148,30 @@ async function runFullAdJob(job, onProgress) {
   });
 
   if (projectId) {
+    const project = await getProject(projectId);
+    const cid = creativeId || project.activeCreativeId;
     if (result.copy) {
-      await setProjectCopy(projectId, result.copy, result.copyPath);
+      await setProjectCopy(projectId, result.copy, result.copyPath, cid);
     }
     await applyBlueprint(projectId, {
       storyboardPath: result.storyboardPath,
       storyboard: result.storyboard,
+      creativeId: cid,
     });
-    await syncGenerationAssetsToProject(projectId, job.id, result);
-    await linkJobToProject(projectId, job.id, {
-      title: result.storyboard?.title,
-      storyboardPath: result.storyboardPath,
-      finalVideo: result.finalVideo,
-      copyPath: result.copyPath,
-      status: "completed",
-      type: "full_ad",
-    });
+    await syncGenerationAssetsToProject(projectId, job.id, result, cid);
+    await linkJobToProject(
+      projectId,
+      job.id,
+      {
+        title: result.storyboard?.title,
+        storyboardPath: result.storyboardPath,
+        finalVideo: result.finalVideo,
+        copyPath: result.copyPath,
+        status: "completed",
+        type: "full_ad",
+      },
+      cid,
+    );
   }
 
   return {
@@ -169,12 +189,15 @@ async function runFullAdJob(job, onProgress) {
 }
 
 async function runBlueprintJob(job, onProgress) {
-  const { offer, overrides, projectId, approvedCopy, wizard } = job.request;
+  const { offer, overrides, projectId, approvedCopy, wizard, creativeId } = job.request;
   if (!projectId) throw new Error("projectId obrigatório para blueprint");
+  await ensureActiveCreative(projectId);
+  const project = await getProject(projectId);
+  const cid = creativeId || project.activeCreativeId;
 
   let copy = approvedCopy;
   if (!copy) {
-    copy = (await getProject(projectId))?.latestCopy;
+    copy = resolveCreative(project, cid)?.copy || project.latestCopy;
   }
 
   const result = await runAdGeneration({
@@ -188,37 +211,47 @@ async function runBlueprintJob(job, onProgress) {
   });
 
   if (result.copy) {
-    await setProjectCopy(projectId, result.copy, result.copyPath);
+    await setProjectCopy(projectId, result.copy, result.copyPath, cid);
   }
 
   await applyBlueprint(projectId, {
     storyboardPath: result.storyboardPath,
     storyboard: result.storyboard,
+    creativeId: cid,
   });
 
   return {
     storyboardPath: result.storyboardPath,
     storyboard: result.storyboard,
     title: result.storyboard?.title,
+    creativeId: cid,
   };
 }
 
 async function runImagesJob(job, onProgress) {
-  const { projectId } = job.request;
+  const { projectId, creativeId } = job.request;
   if (!projectId) throw new Error("projectId obrigatório");
 
-  const project = await getProject(projectId);
+  let project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
+  const cid = creativeId || project.activeCreativeId;
 
-  const { storyboard } = loadStoryboardForProject(project);
+  const { storyboard } = loadStoryboardForProject(project, cid);
   const adConfig = resolveAdConfig(project.settings || job.request.overrides || {});
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, job.id);
 
   await updateProject(projectId, {
-    scenes: project.scenes.map((s) => ({
-      ...s,
-      status: { ...s.status, image: "generating" },
-    })),
+    creatives: project.creatives.map((c) =>
+      c.id === cid
+        ? {
+            ...c,
+            scenes: (c.scenes || []).map((s) => ({
+              ...s,
+              status: { ...s.status, image: "generating" },
+            })),
+          }
+        : c,
+    ),
   });
 
   const { images } = await generateStoryboardImages({
@@ -248,7 +281,7 @@ async function runImagesJob(job, onProgress) {
       metadata: { order: img.order, jobId: job.id },
     });
     assetIds.push(asset.id);
-    await linkAssetToScene(projectId, img.sceneId, asset.id);
+    await registerSceneImageAsset(projectId, img.sceneId, asset.id, cid);
     await addProjectAssetId(projectId, asset.id);
   }
 
@@ -262,6 +295,8 @@ async function runSceneImageJob(job, onProgress) {
 
   const { storyboard } = loadStoryboardForProject(project);
   const adConfig = resolveAdConfig(project.settings || {});
+  const creative = resolveCreative(project, cid);
+  const scenes = creative?.scenes || [];
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, job.id);
 
   await updateProjectScene(projectId, sceneId, {
@@ -305,15 +340,17 @@ async function runSceneImageJob(job, onProgress) {
 }
 
 async function runVideosJob(job, onProgress) {
-  const { projectId } = job.request;
+  const { projectId, creativeId } = job.request;
   if (!projectId) throw new Error("projectId obrigatório");
 
   let project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
+  const cid = creativeId || project.activeCreativeId;
 
-  const { storyboard } = loadStoryboardForProject(project);
+  const { storyboard } = loadStoryboardForProject(project, cid);
   const adConfig = resolveAdConfig(project.settings || {});
-  const scenes = project.scenes || [];
+  const creative = resolveCreative(project, cid);
+  const scenes = creative?.scenes || [];
 
   if (!scenes.length) {
     throw new Error("Sem cenas — gera blueprint primeiro.");
@@ -334,15 +371,23 @@ async function runVideosJob(job, onProgress) {
   );
 
   await updateProject(projectId, {
-    scenes: scenes.map((s) => ({
-      ...s,
-      status: { ...s.status, video: "generating" },
-    })),
+    creatives: project.creatives.map((c) =>
+      c.id === cid
+        ? {
+            ...c,
+            scenes: scenes.map((s) => ({
+              ...s,
+              status: { ...s.status, video: "generating" },
+            })),
+          }
+        : c,
+    ),
   });
 
   const getImagePath = async (scene) => {
     project = (await getProject(projectId)) || project;
-    const fresh = project.scenes.find((s) => s.id === scene.id) || scene;
+    const freshCreative = resolveCreative(project, cid);
+    const fresh = freshCreative?.scenes?.find((s) => s.id === scene.id) || scene;
     return resolveSceneImagePath(project, fresh);
   };
 
@@ -370,6 +415,7 @@ async function runVideosJob(job, onProgress) {
       prompt: clip.prompt,
       jobId: job.id,
       order: clip.order,
+      creativeId: cid,
     });
     videoAssetIds.push(asset.id);
   }
@@ -443,15 +489,17 @@ async function runSceneVideoJob(job, onProgress) {
 }
 
 async function runRebuildJob(job, onProgress) {
-  const { projectId } = job.request;
+  const { projectId, creativeId } = job.request;
   if (!projectId) throw new Error("projectId obrigatório");
 
   const project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
+  const cid = creativeId || project.activeCreativeId;
+  const creative = resolveCreative(project, cid);
 
-  const { storyboard } = loadStoryboardForProject(project);
+  const { storyboard } = loadStoryboardForProject(project, cid);
   const adConfig = resolveAdConfig(project.settings || {});
-  const scenes = [...(project.scenes || [])].sort((a, b) => a.order - b.order);
+  const scenes = [...(creative?.scenes || [])].sort((a, b) => a.order - b.order);
 
   if (!scenes.length) throw new Error("Sem cenas na timeline.");
 
@@ -460,7 +508,7 @@ async function runRebuildJob(job, onProgress) {
     throw new Error(`${missing.length} cena(s) sem clip — Animate All primeiro.`);
   }
 
-  await updateProject(projectId, { timelineStatus: "building" });
+  await updateCreative(projectId, cid, { timelineStatus: "building" });
 
   onProgress?.({ step: "rebuild", message: "A recolher clips..." });
 
@@ -469,7 +517,7 @@ async function runRebuildJob(job, onProgress) {
     clipPaths.push(await resolveSceneVideoPath(scene));
   }
 
-  const outputDir = path.join(PROJECT_ROOT, "output", `project-${projectId}`);
+  const outputDir = path.join(PROJECT_ROOT, "output", `project-${projectId}`, cid);
   const finalPath = path.join(outputDir, `export-${job.id}.mp4`);
 
   const result = await rebuildTimelineVideo({
@@ -485,18 +533,22 @@ async function runRebuildJob(job, onProgress) {
     projectId,
     type: "video",
     source: "export",
-    prompt: project.blueprint?.title || "Final export",
+    prompt: creative?.blueprint?.title || creative?.title || "Final export",
     sourcePath: result.finalVideo,
     ext: "mp4",
-    metadata: { export: true, jobId: job.id, clipCount: result.clipCount },
+    metadata: { export: true, jobId: job.id, clipCount: result.clipCount, creativeId: cid },
   });
 
   await addProjectAssetId(projectId, exportAsset.id);
-  await setProjectExport(projectId, {
-    assetId: exportAsset.id,
-    jobId: job.id,
-    finalVideo: result.finalVideo,
-  });
+  await setProjectExport(
+    projectId,
+    {
+      assetId: exportAsset.id,
+      jobId: job.id,
+      finalVideo: result.finalVideo,
+    },
+    cid,
+  );
 
   return {
     finalVideo: result.finalVideo,

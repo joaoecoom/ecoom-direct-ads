@@ -13,6 +13,7 @@ import { destroyImagesTab, initImagesTab, renderImagesPanel } from "./images.js"
 import { destroyVideosTab, initVideosTab, renderVideosPanel } from "./videos.js";
 import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./timeline.js";
 import { destroyExportTab, initExportTab, renderExportPanel } from "./export.js";
+import { initCreativesRail, renderCreativesRail } from "./creatives.js";
 import { assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
 
 const views = {
@@ -212,6 +213,7 @@ function renderProjectWorkspace(id) {
   }
 
   renderProjectTabs(id);
+  initCreativesRail(id);
   switchWorkspaceTab(activeWorkspaceTab);
   void renderBlueprint(id);
 }
@@ -354,6 +356,8 @@ function renderProjectTabs(id) {
   const tabsEl = document.getElementById("workspace-tabs");
   const project = getProject(id);
   const jobs = project?.jobIds?.length || 0;
+  const videoCount = project?.creatives?.length || 0;
+  const activeTitle = project?.activeCreative?.title || project?.blueprint?.title || "—";
 
   const videosReady = (project?.scenes || []).filter((s) => s.videoAssetId).length;
 
@@ -365,7 +369,7 @@ function renderProjectTabs(id) {
     <button type="button" class="tab" data-tab="videos">Videos</button>
     <button type="button" class="tab" data-tab="timeline">Timeline</button>
     <button type="button" class="tab" data-tab="export">Export${exportReady ? " ✓" : ""}</button>
-    <span class="tab-meta">${jobs} jobs · ${project?.scenes?.length || 0} cenas · ${videosReady} clips</span>`;
+    <span class="tab-meta">${videoCount} vídeo(s) · ${escapeHtml(activeTitle)} · ${videosReady} clips</span>`;
 
   tabsEl.querySelectorAll(".tab[data-tab]:not(.disabled)").forEach((btn) => {
     btn.onclick = () => switchWorkspaceTab(btn.dataset.tab);
@@ -552,11 +556,20 @@ window.addEventListener("ecoom:switch-tab", (e) => {
   if (tab && currentProjectId) switchWorkspaceTab(tab);
 });
 
+window.addEventListener("ecoom:creative-changed", async (e) => {
+  await initProjects();
+  if (currentProjectId && e.detail?.projectId === currentProjectId) {
+    renderProjectWorkspace(currentProjectId);
+    renderSidebarProjects();
+  }
+});
+
 window.addEventListener("ecoom:job-complete", async (e) => {
   await initProjects();
   if (currentProjectId && e.detail?.projectId === currentProjectId) {
     renderProjectWorkspace(currentProjectId);
     renderSidebarProjects();
+    void renderCreativesRail(currentProjectId);
     if (activeWorkspaceTab === "images") {
       void renderImagesPanel(currentProjectId);
     }

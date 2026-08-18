@@ -937,6 +937,83 @@ video {
   display: block;
 }
 
+.project-videos-rail {
+  margin-bottom: 1rem;
+}
+
+.videos-rail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.videos-rail-list {
+  display: flex;
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.videos-rail-card {
+  flex: 0 0 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.videos-rail-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.videos-rail-thumb {
+  aspect-ratio: 9 / 16;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.videos-rail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.videos-rail-placeholder {
+  color: var(--muted);
+  font-size: 1.25rem;
+}
+
+.videos-rail-info strong {
+  display: block;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.videos-rail-info span {
+  font-size: 0.68rem;
+}
+
+.videos-rail-empty {
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+
 .avatar-panel,
 .references-panel {
   margin-bottom: 1rem;
