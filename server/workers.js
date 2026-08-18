@@ -426,7 +426,7 @@ async function runRebuildJob(job, onProgress) {
 }
 
 export async function persistJobProgress(jobId, update) {
-  await updateJob(jobId, {
+  await safeUpdateJob(jobId, {
     status: "running",
     progress: {
       step: update.step,

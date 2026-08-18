@@ -148,13 +148,14 @@ export function trackJob(jobId, options = {}) {
     onComplete,
     onFailed,
     onUpdate,
+    onMissing,
   } = options;
 
   stopJobTracking();
   activeJobId = jobId;
   lastLogKey = null;
+  let missingPolls = 0;
 
-  const panel = document.getElementById("workspace-job-activity");
   const log = document.getElementById("ws-job-log");
   const stepsEl = document.getElementById("ws-job-steps");
   if (log) log.innerHTML = "";
@@ -163,9 +164,29 @@ export function trackJob(jobId, options = {}) {
 
   const steps = PIPELINE_BY_TYPE[jobType] || PIPELINE_BY_TYPE.full_ad;
 
+  const failMissing = () => {
+    stopJobTracking();
+    const msg = "Job perdido no servidor — clica Generate outra vez.";
+    if (log) {
+      appendLog(log, {
+        status: "failed",
+        progress: { step: "error", message: msg },
+      });
+    }
+    updateHeader({ id: jobId, status: "failed", progress: { message: msg } });
+    onMissing?.(msg);
+    onFailed?.({ id: jobId, status: "failed", error: msg });
+  };
+
   const poll = async () => {
     const job = await fetchJob(jobId);
-    if (!job || activeJobId !== jobId) return;
+    if (!job) {
+      missingPolls += 1;
+      if (missingPolls >= 5) failMissing();
+      return;
+    }
+    missingPolls = 0;
+    if (activeJobId !== jobId) return;
 
     updateHeader(job);
     updateProgressBar(job);

@@ -17,7 +17,7 @@ import {
   MAX_TOTAL_DURATION_SECONDS,
   MIN_SCENE_COUNT,
 } from "../src/lib/ad-config.js";
-import { createJob, getJob, listJobs, updateJob } from "./job-store.js";
+import { createJob, getJob, listJobs, listPendingJobs, resetStaleRunningJobs, safeUpdateJob, updateJob } from "./job-store.js";
 import {
   createAsset,
   deleteAsset,
@@ -64,7 +64,16 @@ const enqueue = (id) => {
 };
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "ecoom-direct-ads-api", activeJobId });
+  res.json({
+    ok: true,
+    service: "ecoom-direct-ads-api",
+    activeJobId,
+    queueLength: queue.length,
+  });
+});
+
+app.get("/api/queue/status", (_req, res) => {
+  res.json({ activeJobId, queueLength: queue.length, queuedIds: [...queue] });
 });
 
 app.get("/api/config", (_req, res) => {
@@ -519,7 +528,10 @@ async function processQueue() {
 
   try {
     const job = await getJob(jobId);
-    if (!job) return;
+    if (!job) {
+      console.error(`[queue] Job ${jobId} em falta no disco — ignorado`);
+      return;
+    }
 
     await updateJob(jobId, {
       status: "running",
@@ -536,10 +548,31 @@ async function processQueue() {
       result,
     });
   } catch (err) {
-    await persistJobFailed(jobId, err);
+    console.error(`[queue] Job ${jobId} falhou:`, err.message);
+    await safeUpdateJob(jobId, {
+      status: "failed",
+      error: err.message,
+      progress: { step: "error", message: err.message },
+    });
   } finally {
     activeJobId = null;
+    setImmediate(processQueue);
+  }
+}
+
+async function recoverQueueOnStartup() {
+  try {
+    await resetStaleRunningJobs();
+    const pending = await listPendingJobs();
+    for (const job of pending) {
+      if (!queue.includes(job.id)) queue.push(job.id);
+    }
+    if (pending.length) {
+      console.log(`[queue] Recuperados ${pending.length} job(s) pendente(s)`);
+    }
     processQueue();
+  } catch (err) {
+    console.error("[queue] Falha ao recuperar fila:", err.message);
   }
 }
 
@@ -547,4 +580,5 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Ecoom Direct ADS API — http://0.0.0.0:${PORT}`);
   console.log(`   Frontend CORS: ${FRONTEND_URL}`);
   console.log(`   Root: ${ROOT}\n`);
+  void recoverQueueOnStartup();
 });

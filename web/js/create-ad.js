@@ -313,6 +313,7 @@ async function onSubmit(e) {
       jobType: "full_ad",
       pollMs: 1000,
       onUpdate: setJobUI,
+      onMissing: (msg) => showError(msg),
       onComplete: async (completedJob) => {
         setJobUI(completedJob);
         els.resultVideo.src = `${jobVideoUrl(data.jobId)}?t=${Date.now()}`;
@@ -335,6 +336,7 @@ async function onSubmit(e) {
       },
       onFailed: (failedJob) => {
         setJobUI(failedJob);
+        showError(failedJob.error || "Geração falhou");
         els.submitBtn.disabled = false;
         els.submitBtn.textContent = "Generate Creative";
       },
