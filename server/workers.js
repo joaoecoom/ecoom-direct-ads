@@ -20,6 +20,7 @@ import {
   updateProject,
   updateProjectScene,
 } from "./project-store.js";
+import { safeUpdateJob, updateJob } from "./job-store.js";
 import { pickAdOverrides } from "./ad-overrides.js";
 import { rebuildTimelineVideo } from "../src/lib/timeline-rebuild.js";
 import { resolveCreative } from "./creative-store.js";
