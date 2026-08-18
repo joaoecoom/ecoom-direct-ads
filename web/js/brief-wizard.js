@@ -156,22 +156,46 @@ function renderShell() {
 }
 
 function bindNav() {
-  els.prevBtn?.addEventListener("click", () => {
-    if (stepIndex > 0) {
-      stepIndex -= 1;
-      renderStep();
-      updateProgress();
+  els.prevBtn?.addEventListener("click", goPrev);
+  els.nextBtn?.addEventListener("click", goNext);
+}
+
+function goPrev() {
+  if (stepIndex > 0) {
+    stepIndex -= 1;
+    renderStep();
+    updateProgress();
+  }
+}
+
+function goNext() {
+  if (stepIndex < STEPS.length - 1) {
+    stepIndex += 1;
+    renderStep();
+    updateProgress();
+  } else {
+    onChangeCb?.({ complete: true, wizard: getWizardState(), brief: getBuiltBrief() });
+  }
+}
+
+function bindStepKeyboard() {
+  if (!els.stepBody) return;
+
+  if (els._keydownHandler) {
+    els.stepBody.removeEventListener("keydown", els._keydownHandler);
+  }
+
+  els._keydownHandler = (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+
+    const tag = e.target.tagName;
+    if (tag === "TEXTAREA" || tag === "SELECT") {
+      e.preventDefault();
+      goNext();
     }
-  });
-  els.nextBtn?.addEventListener("click", () => {
-    if (stepIndex < STEPS.length - 1) {
-      stepIndex += 1;
-      renderStep();
-      updateProgress();
-    } else {
-      onChangeCb?.({ complete: true, wizard: getWizardState(), brief: getBuiltBrief() });
-    }
-  });
+  };
+
+  els.stepBody.addEventListener("keydown", els._keydownHandler);
 }
 
 function updateProgress() {
@@ -209,7 +233,7 @@ function renderStep() {
   if (step.field === "textarea") {
     els.stepBody.innerHTML = `
       <h3 class="wizard-q">${step.title}</h3>
-      <p class="muted wizard-hint">${step.hint}${step.optional ? " (opcional)" : ""}</p>
+      <p class="muted wizard-hint">${step.hint}${step.optional ? " (opcional)" : ""} · Enter avança</p>
       <textarea id="wizard-field" rows="4" placeholder="${step.placeholder || ""}">${escapeHtml(state[step.key] || "")}</textarea>
     `;
     const field = document.getElementById("wizard-field");
@@ -218,13 +242,14 @@ function renderStep() {
       emitChange();
     });
     field?.focus();
+    bindStepKeyboard();
     return;
   }
 
   if (step.field === "style-tone") {
     els.stepBody.innerHTML = `
       <h3 class="wizard-q">${step.title}</h3>
-      <p class="muted wizard-hint">${step.hint}</p>
+      <p class="muted wizard-hint">${step.hint} · Enter avança</p>
       <div class="grid">
         <div>
           <label for="w-style">Estilo</label>
@@ -248,13 +273,14 @@ function renderStep() {
       state.tone = toneEl.value;
       emitChange();
     });
+    bindStepKeyboard();
     return;
   }
 
   if (step.field === "format") {
     els.stepBody.innerHTML = `
       <h3 class="wizard-q">${step.title}</h3>
-      <p class="muted wizard-hint">${step.hint}</p>
+      <p class="muted wizard-hint">${step.hint} · Enter avança</p>
       <div class="grid">
         <div>
           <label for="w-language">Idioma</label>
@@ -303,6 +329,8 @@ function renderStep() {
       emitChange();
     });
   }
+
+  bindStepKeyboard();
 }
 
 function updateVariants(varEl, lang, selected) {
