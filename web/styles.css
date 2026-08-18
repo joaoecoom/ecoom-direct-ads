@@ -1,20 +1,24 @@
 :root {
-  --bg: #08080c;
-  --bg-elevated: #0e0e14;
-  --surface: #13131b;
-  --surface-hover: #1a1a24;
-  --border: #252532;
-  --border-soft: #1c1c26;
-  --text: #f2f2f7;
-  --muted: #8b8b9a;
-  --accent: #6366f1;
-  --accent-soft: rgba(99, 102, 241, 0.15);
-  --accent-2: #8b5cf6;
-  --success: #22c55e;
-  --error: #ef4444;
-  --sidebar-w: 260px;
-  --radius: 14px;
-  --radius-sm: 10px;
+  --bg: #000000;
+  --bg-elevated: #0a0a0a;
+  --surface: #141414;
+  --surface-hover: #1c1c1c;
+  --surface-raised: #222222;
+  --border: #2a2a2a;
+  --border-soft: #1a1a1a;
+  --text: #e8eaed;
+  --muted: #9aa0a6;
+  --accent: #8ab4f8;
+  --accent-soft: rgba(138, 180, 248, 0.14);
+  --accent-2: #aecbfa;
+  --accent-focus: rgba(138, 180, 248, 0.45);
+  --success: #81c995;
+  --error: #f28b82;
+  --warn: #fdd663;
+  --sidebar-w: 240px;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
 }
 
 * {
@@ -117,8 +121,9 @@ body {
 }
 
 .sidebar-link.active {
-  background: var(--accent-soft);
+  background: var(--surface-raised);
   color: var(--text);
+  border-radius: 999px;
 }
 
 .sidebar-section {
@@ -243,8 +248,17 @@ body {
 
 .btn.primary {
   border: 0;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: white;
+  background: var(--text);
+  color: #000;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: #fff;
+}
+
+.btn.ghost.danger:hover {
+  color: var(--error);
+  background: rgba(242, 139, 130, 0.1);
 }
 
 .btn.primary:disabled {
@@ -273,7 +287,170 @@ body {
   font-size: 1rem;
 }
 
-/* Projects grid */
+/* Projects grid — Flow-inspired */
+.projects-flow-wrap {
+  padding: 0 0 2rem;
+}
+
+.projects-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.25rem;
+  max-width: 1200px;
+}
+
+.flow-project-card {
+  cursor: pointer;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: transparent;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.flow-project-card:hover {
+  transform: translateY(-2px);
+}
+
+.flow-project-card:hover .flow-project-thumb {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.flow-project-thumb {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  transition: box-shadow 0.2s ease;
+}
+
+.flow-project-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.flow-project-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%);
+  color: var(--muted);
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.flow-project-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.15rem 0;
+}
+
+.flow-project-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.flow-project-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-project-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.flow-project-actions {
+  display: flex;
+  gap: 0.15rem;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.flow-project-card:hover .flow-project-actions {
+  opacity: 1;
+}
+
+.flow-project-actions button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: var(--radius-xs);
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+
+.flow-project-actions button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.flow-project-new {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius);
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(145deg, #3d2f22 0%, #2a2218 45%, #1a1510 100%);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  display: grid;
+  place-items: center;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  min-height: 140px;
+}
+
+.flow-project-new:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+
+.flow-project-new.solo {
+  aspect-ratio: auto;
+  min-height: 120px;
+  max-width: 280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+}
+
+.flow-empty {
+  text-align: center;
+  padding: 4rem 2rem;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.flow-empty-icon {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  opacity: 0.6;
+}
+
+.flow-empty h2 {
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+}
+
+.flow-header h1 {
+  font-weight: 500;
+  font-size: 1.5rem;
+}
+
+/* Legacy project cards (fallback) */
 .projects-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -347,6 +524,26 @@ body {
   margin-top: 0.5rem;
 }
 
+.project-header .view-header,
+.project-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.project-header .btn.ghost.sm {
+  margin-left: 0;
+}
+
+.project-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
 .workspace-tabs {
   display: flex;
   align-items: center;
@@ -383,15 +580,23 @@ body {
   color: var(--muted);
 }
 
+.create-form.card,
+.create-hero.card {
+  background: var(--surface);
+  border-color: var(--border-soft);
+  border-radius: var(--radius);
+}
+
 .create-hero {
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, var(--surface) 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
 }
 
 .eyebrow {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--muted);
   margin: 0 0 0.5rem;
 }
 
@@ -412,12 +617,22 @@ select,
 input[type="text"],
 input[type="number"] {
   width: 100%;
-  background: var(--bg);
+  background: #000;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 0.75rem 0.9rem;
   font: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+textarea:focus,
+select:focus,
+input[type="text"]:focus,
+input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-focus);
 }
 
 textarea {
@@ -497,7 +712,7 @@ textarea {
 }
 
 .dot.running {
-  background: #f59e0b;
+  background: var(--warn);
   animation: pulse 1.2s infinite;
 }
 
@@ -1137,8 +1352,9 @@ video {
 
 .workspace-job-activity {
   margin-bottom: 1rem;
-  border-color: rgba(99, 102, 241, 0.35);
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), transparent);
+  border-color: var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
 }
 
 .job-activity-head {
@@ -1151,6 +1367,94 @@ video {
 .job-activity-title {
   flex: 1;
   min-width: 0;
+}
+
+.job-current-line {
+  font-size: 0.92rem;
+  color: var(--text);
+  margin-top: 0.15rem;
+  line-height: 1.35;
+}
+
+.job-subline {
+  font-size: 0.72rem;
+  margin-top: 0.2rem;
+}
+
+.brief-wizard {
+  margin-top: 0.5rem;
+}
+
+.wizard-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.wizard-progress-track {
+  flex: 1;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wizard-progress-bar {
+  height: 100%;
+  width: 12%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.25s ease;
+}
+
+.wizard-step-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wizard-q {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.wizard-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+}
+
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  gap: 0.5rem;
+}
+
+.brief-review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.copy-review {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.copy-meta {
+  margin-bottom: 0.75rem;
+}
+
+.copy-fields input[type="text"] {
+  margin-bottom: 0.75rem;
+}
+
+.copy-fields textarea {
+  min-height: 120px;
+  margin-bottom: 0.75rem;
 }
 
 .job-progress-label {
@@ -1169,7 +1473,7 @@ video {
 .job-progress-bar {
   height: 100%;
   width: 2%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   transition: width 0.35s ease;
 }
 

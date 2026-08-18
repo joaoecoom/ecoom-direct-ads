@@ -52,14 +52,13 @@
       <div class="workspace">
         <!-- PROJECTS LIST -->
         <section id="view-projects" class="view">
-          <header class="view-header">
+          <header class="view-header flow-header">
             <div>
-              <h1>Projects</h1>
+              <h1>Projectos</h1>
               <p class="muted">Cria, organiza e produz criativos Direct Response.</p>
             </div>
-            <button type="button" class="btn primary" id="btn-new-project">+ New Project</button>
           </header>
-          <div id="project-list"></div>
+          <div id="project-list" class="projects-flow-wrap"></div>
         </section>
 
         <!-- PROJECT WORKSPACE -->
@@ -70,7 +69,12 @@
               <h1 id="project-title">Project</h1>
               <p id="project-subtitle" class="muted"></p>
             </div>
-            <button type="button" class="btn ghost sm" id="btn-rename-project">Rename</button>
+            <div class="project-header-actions">
+              <button type="button" class="btn ghost sm" id="btn-rename-project">Rename</button>
+              <button type="button" class="btn ghost sm danger" id="btn-delete-project" title="Eliminar projecto">
+                Eliminar
+              </button>
+            </div>
           </header>
 
           <div id="workspace-tabs" class="workspace-tabs"></div>
@@ -80,7 +84,8 @@
               <span id="ws-job-dot" class="dot running"></span>
               <div class="job-activity-title">
                 <strong id="ws-job-title">Processo</strong>
-                <div id="ws-job-message" class="muted">A aguardar…</div>
+                <div id="ws-job-current" class="job-current-line">A aguardar…</div>
+                <div id="ws-job-message" class="muted job-subline"></div>
               </div>
               <span id="ws-job-progress-label" class="job-progress-label muted"></span>
             </div>
@@ -91,76 +96,49 @@
 
           <div id="panel-create" class="workspace-panel create-workspace">
             <div class="create-hero card">
-              <p class="eyebrow">Master Creative Prompt</p>
-              <h2>What do you want to create?</h2>
+              <p class="eyebrow">Creative Brief</p>
+              <h2>O que queres criar?</h2>
               <p class="muted">
-                Descreve o anúncio completo — objetivo, persona, tom, duração, CTA. A IA
-                transforma isto em storyboard, imagens e vídeo.
+                Responde às perguntas — a IA escreve a copy, planea cenas, imagens e vídeo.
+                Tu decides estilo, idioma e formato; duração e nº de cenas vêm da copy.
               </p>
             </div>
 
             <form id="create-ad-form" class="card create-form">
-              <label for="master-prompt">Master Creative Prompt</label>
-              <textarea
-                id="master-prompt"
-                required
-                placeholder="Quero um vídeo UGC de 60 segundos para um suplemento de energia, mulher portuguesa de 40 anos, ambiente de cozinha, tom natural, estilo testimonial, com CTA para experimentar."
-              ></textarea>
+              <div id="wizard-section">
+                <div id="brief-wizard-root"></div>
+              </div>
 
-              <div class="settings-drawer">
-                <details open>
-                  <summary>Global Creative Settings</summary>
-                  <div class="grid">
-                    <div>
-                      <label for="total-duration">Duração total</label>
-                      <select id="total-duration"></select>
-                    </div>
-                    <div id="custom-duration-wrap" class="hidden">
-                      <label for="custom-duration">Segundos (custom)</label>
-                      <input type="number" id="custom-duration" min="8" max="600" value="60" />
-                    </div>
-                    <div>
-                      <label for="duration">Duração / clip</label>
-                      <select id="duration"></select>
-                    </div>
-                    <div>
-                      <label for="scenes">Cenas</label>
-                      <input type="number" id="scenes" min="1" max="150" value="3" />
-                    </div>
-                    <div class="full-width">
-                      <p id="scene-hint" class="hint"></p>
-                    </div>
-                    <div>
-                      <label for="format">Formato</label>
-                      <select id="format"></select>
-                    </div>
-                    <div>
-                      <label for="resolution">Resolução</label>
-                      <select id="resolution"></select>
-                    </div>
-                    <div>
-                      <label for="language">Idioma</label>
-                      <select id="language"></select>
-                    </div>
-                    <div>
-                      <label for="variant">Variante</label>
-                      <select id="variant"></select>
-                    </div>
-                    <div>
-                      <label for="style">Estilo</label>
-                      <select id="style"></select>
-                    </div>
-                    <div>
-                      <label for="tone">Tom</label>
-                      <select id="tone"></select>
-                    </div>
+              <div id="brief-review-section" class="hidden">
+                <div class="brief-review-head">
+                  <div>
+                    <p class="eyebrow">Brief compilado</p>
+                    <p class="muted">Revê o prompt antes de gerar copy. Podes editar à mão.</p>
                   </div>
-                </details>
+                  <button type="button" class="btn ghost sm" id="btn-edit-brief">← Editar respostas</button>
+                </div>
+                <textarea id="brief-preview" rows="12"></textarea>
+              </div>
+
+              <div id="copy-review-section" class="copy-review hidden">
+                <p class="eyebrow">Copy gerada</p>
+                <p id="copy-meta" class="muted copy-meta"></p>
+                <div class="copy-fields">
+                  <label for="copy-hook">Hook</label>
+                  <input type="text" id="copy-hook" />
+                  <label for="copy-voiceover">Voiceover</label>
+                  <textarea id="copy-voiceover" rows="6"></textarea>
+                  <label for="copy-cta">CTA</label>
+                  <input type="text" id="copy-cta" />
+                </div>
               </div>
 
               <div class="create-actions">
                 <button type="button" class="btn sm" id="goto-images-tab">Images →</button>
-                <button type="submit" class="btn primary lg" id="submit-btn">Generate Creative</button>
+                <button type="button" class="btn sm" id="btn-gen-copy" disabled>Gerar Copy</button>
+                <button type="button" class="btn primary lg" id="submit-btn" disabled>
+                  Gerar Vídeo Completo
+                </button>
               </div>
             </form>
 
@@ -196,8 +174,8 @@
             <div class="roadmap card muted-box">
               <strong>Fluxo recomendado</strong>
               <p class="muted">
-                1) Master Prompt → 2) Tab <strong>Images</strong> → Blueprint → Generate All Images →
-                3) Generate Creative (vídeo completo) ou Fase 4 Animate All.
+                1) Brief (perguntas) → 2) <strong>Gerar Copy</strong> → revê → 3)
+                <strong>Gerar Vídeo</strong> ou tab Images → Blueprint → imagens → animate.
               </p>
             </div>
           </div>

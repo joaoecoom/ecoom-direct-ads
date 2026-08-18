@@ -118,41 +118,64 @@ function renderSidebarProjects() {
     .join("");
 }
 
+function getProjectThumb(project) {
+  const scene = project.scenes?.find((s) => s.imageAssetId);
+  if (scene?.imageAssetId) return assetFileUrl(scene.imageAssetId);
+  if (project.latestExport?.assetId) return assetFileUrl(project.latestExport.assetId);
+  return null;
+}
+
 function renderProjectsGrid() {
   if (!projectListEl) return;
   const projects = listProjects();
 
   if (projects.length === 0) {
     projectListEl.innerHTML = `
-      <div class="empty-state card">
-        <h2>Começa o teu primeiro projecto</h2>
-        <p class="muted">Descreve o anúncio. O Ecoom constrói-o.</p>
-        <button type="button" class="btn primary" data-action="new-project">+ New Project</button>
+      <div class="flow-empty">
+        <div class="flow-empty-icon">✿</div>
+        <h2>Começa a criar</h2>
+        <p class="muted">Adiciona o teu primeiro projecto Direct Response.</p>
+        <button type="button" class="flow-project-new solo" data-action="new-project">
+          <span>+ Novo projeto</span>
+        </button>
       </div>`;
     return;
   }
 
   projectListEl.innerHTML = `
-    <div class="projects-grid">
+    <div class="projects-flow-grid">
       ${projects
-        .map(
-          (p) => `
-        <article class="project-card card" data-open-project="${p.id}">
-          <div class="project-card-head">
-            <h3>${escapeHtml(p.name)}</h3>
-            <div class="project-actions">
-              <button type="button" title="Duplicar" data-duplicate="${p.id}">⎘</button>
-              <button type="button" title="Eliminar" data-delete="${p.id}">×</button>
+        .map((p) => {
+          const thumb = getProjectThumb(p);
+          return `
+        <article class="flow-project-card" data-open-project="${p.id}">
+          <div class="flow-project-thumb">
+            ${
+              thumb
+                ? `<img src="${thumb}" alt="" loading="lazy" />`
+                : `<div class="flow-project-placeholder"><span>${escapeHtml(p.name.slice(0, 1).toUpperCase())}</span></div>`
+            }
+          </div>
+          <div class="flow-project-footer">
+            <div class="flow-project-info">
+              <strong class="flow-project-name">${escapeHtml(p.name)}</strong>
+              <span class="flow-project-date">${formatFlowDate(p.updatedAt)}</span>
+            </div>
+            <div class="flow-project-actions">
+              <button type="button" title="Renomear" data-rename="${p.id}" aria-label="Renomear">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              </button>
+              <button type="button" title="Eliminar" data-delete="${p.id}" aria-label="Eliminar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+              </button>
             </div>
           </div>
-          <p class="muted project-preview">${escapeHtml(p.masterPrompt || "Sem prompt ainda")}</p>
-          <div class="project-meta">
-            <span>${p.jobIds?.length || 0} gerações</span>
-            <span>${formatDate(p.updatedAt)}</span>
-          </div>
-        </article>`,
-        )
+        </article>`;
+        })
         .join("")}
+      <button type="button" class="flow-project-new" data-action="new-project">
+        <span>+ Novo projeto</span>
+      </button>
     </div>`;
 }
 
@@ -357,6 +380,19 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function formatFlowDate(iso) {
+  try {
+    const d = new Date(iso);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month}, ${hours}:${mins}`;
+  } catch {
+    return "";
+  }
+}
+
 function formatDate(iso) {
   try {
     return new Date(iso).toLocaleDateString("pt-PT", {
@@ -431,7 +467,56 @@ document.getElementById("btn-back-projects")?.addEventListener("click", () => {
   navigate("projects");
 });
 
+document.getElementById("btn-delete-project")?.addEventListener("click", async () => {
+  if (!currentProjectId) return;
+  await confirmDeleteProject(currentProjectId);
+});
+
+async function confirmDeleteProject(id) {
+  const project = getProject(id);
+  const name = project?.name || "este projecto";
+  if (!confirm(`Eliminar "${name}"?\n\nEsta acção não pode ser desfeita.`)) return false;
+  await deleteProject(id);
+  if (currentProjectId === id) {
+    currentProjectId = null;
+    navigate("projects");
+  } else {
+    renderRoute();
+  }
+  return true;
+}
+
 document.body.addEventListener("click", async (e) => {
+  const delId = e.target.closest("[data-delete]")?.dataset.delete;
+  if (delId) {
+    e.preventDefault();
+    e.stopPropagation();
+    await confirmDeleteProject(delId);
+    return;
+  }
+
+  const dupId = e.target.closest("[data-duplicate]")?.dataset.duplicate;
+  if (dupId) {
+    e.preventDefault();
+    e.stopPropagation();
+    const copy = await duplicateProject(dupId);
+    if (copy) navigate("project", copy.id);
+    return;
+  }
+
+  const renameId = e.target.closest("[data-rename]")?.dataset.rename;
+  if (renameId) {
+    e.preventDefault();
+    e.stopPropagation();
+    const project = getProject(renameId);
+    const name = prompt("Nome do projecto:", project?.name);
+    if (name?.trim()) {
+      await updateProject(renameId, { name: name.trim() });
+      renderRoute();
+    }
+    return;
+  }
+
   const openId = e.target.closest("[data-open-project]")?.dataset.openProject;
   if (openId) {
     navigate("project", openId);
@@ -440,23 +525,6 @@ document.body.addEventListener("click", async (e) => {
 
   if (e.target.closest('[data-action="new-project"]')) {
     openNewProjectModal();
-    return;
-  }
-
-  const dupId = e.target.closest("[data-duplicate]")?.dataset.duplicate;
-  if (dupId) {
-    const copy = await duplicateProject(dupId);
-    if (copy) navigate("project", copy.id);
-    return;
-  }
-
-  const delId = e.target.closest("[data-delete]")?.dataset.delete;
-  if (delId) {
-    if (confirm("Eliminar este projecto?")) {
-      await deleteProject(delId);
-      if (currentProjectId === delId) navigate("projects");
-      else renderRoute();
-    }
   }
 });
 

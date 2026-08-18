@@ -45,6 +45,7 @@ function normalizeProject(raw) {
     blueprint: raw.blueprint || null,
     latestExport,
     timelineStatus: raw.timelineStatus || "pending",
+    latestCopy: raw.latestCopy || null,
   };
 }
 
@@ -94,13 +95,37 @@ function normalizeScene(scene, projectHasExport = false) {
   };
 }
 
+export async function setProjectCopy(projectId, copy, copyPath = null) {
+  return updateProject(projectId, {
+    latestCopy: {
+      ...copy,
+      copyPath,
+      savedAt: new Date().toISOString(),
+    },
+  });
+}
+
 export async function applyBlueprint(projectId, { storyboardPath, storyboard }) {
+  const sceneCount = storyboard.scenes?.length || 0;
+  const clipDuration =
+    storyboard.clipDurationSeconds ||
+    storyboard.config?.clipDurationSeconds ||
+    storyboard.durationSeconds ||
+    8;
+
   return updateProject(projectId, {
     blueprintPath: storyboardPath,
     blueprint: {
       title: storyboard.title,
       hook: storyboard.hook,
-      sceneCount: storyboard.scenes?.length || 0,
+      sceneCount,
+      clipDurationSeconds: clipDuration,
+      totalDurationSeconds: storyboard.totalDurationSeconds || sceneCount * clipDuration,
+    },
+    settings: {
+      sceneCount,
+      clipDurationSeconds: clipDuration,
+      totalDurationSeconds: storyboard.totalDurationSeconds || sceneCount * clipDuration,
     },
     scenes: storyboardToScenes(storyboard),
   });

@@ -12,6 +12,7 @@ import {
   linkAssetToScene,
   linkJobToProject,
   linkVideoAssetToScene,
+  setProjectCopy,
   setProjectExport,
   updateProject,
   updateProjectScene,
@@ -36,6 +37,7 @@ export async function runJob(job, onProgress) {
   const type = job.request?.type || job.type || "full_ad";
 
   if (type === "blueprint") return runBlueprintJob(job, onProgress);
+  if (type === "copy") return runCopyJob(job, onProgress);
   if (type === "images") return runImagesJob(job, onProgress);
   if (type === "scene_image") return runSceneImageJob(job, onProgress);
   if (type === "videos") return runVideosJob(job, onProgress);
@@ -69,16 +71,44 @@ async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId,
   return asset;
 }
 
-async function runFullAdJob(job, onProgress) {
-  const { offer, overrides, projectId } = job.request;
+async function runCopyJob(job, onProgress) {
+  const { offer, overrides, projectId, wizard } = job.request;
+  if (!projectId) throw new Error("projectId obrigatório para copy");
+
   const result = await runAdGeneration({
     offer,
     overrides,
     runId: job.id,
+    copyOnly: true,
+    wizard,
+    onProgress,
+  });
+
+  await setProjectCopy(projectId, result.copy, result.copyPath);
+
+  return { copy: result.copy, copyPath: result.copyPath };
+}
+
+async function runFullAdJob(job, onProgress) {
+  const { offer, overrides, projectId, approvedCopy, wizard } = job.request;
+  let copy = approvedCopy;
+  if (!copy && projectId) {
+    copy = (await getProject(projectId))?.latestCopy;
+  }
+
+  const result = await runAdGeneration({
+    offer,
+    overrides: { ...overrides, useCopyFirst: !copy },
+    runId: job.id,
+    approvedCopy: copy || null,
+    wizard,
     onProgress,
   });
 
   if (projectId) {
+    if (result.copy) {
+      await setProjectCopy(projectId, result.copy, result.copyPath);
+    }
     await applyBlueprint(projectId, {
       storyboardPath: result.storyboardPath,
       storyboard: result.storyboard,
@@ -104,16 +134,27 @@ async function runFullAdJob(job, onProgress) {
 }
 
 async function runBlueprintJob(job, onProgress) {
-  const { offer, overrides, projectId } = job.request;
+  const { offer, overrides, projectId, approvedCopy, wizard } = job.request;
   if (!projectId) throw new Error("projectId obrigatório para blueprint");
+
+  let copy = approvedCopy;
+  if (!copy) {
+    copy = (await getProject(projectId))?.latestCopy;
+  }
 
   const result = await runAdGeneration({
     offer,
-    overrides,
+    overrides: { ...overrides, useCopyFirst: !copy },
     runId: job.id,
     storyboardOnly: true,
+    approvedCopy: copy || null,
+    wizard,
     onProgress,
   });
+
+  if (result.copy) {
+    await setProjectCopy(projectId, result.copy, result.copyPath);
+  }
 
   await applyBlueprint(projectId, {
     storyboardPath: result.storyboardPath,

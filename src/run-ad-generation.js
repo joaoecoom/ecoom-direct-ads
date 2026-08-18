@@ -13,20 +13,24 @@ import {
 import { concatenateVideos } from "./lib/concat-videos.js";
 import { mixSceneClipsWithVoice } from "./lib/mix-audio.js";
 import { isLipSyncAvailable, lipSyncSceneClips } from "./lib/lipsync.js";
-import { generateStoryboard } from "./lib/storyboard.js";
+import { generateStoryboard, generateStoryboardFromCopy } from "./lib/storyboard.js";
+import { generateAdCopy } from "./lib/copy-writer.js";
 import { runSequence } from "./generate-sequence.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = path.resolve(__dirname, "..");
 
 /**
- * @param {{ offer: string, overrides?: object, runId?: string, storyboardOnly?: boolean, onProgress?: (update: object) => void }} params
+ * @param {{ offer: string, overrides?: object, runId?: string, storyboardOnly?: boolean, copyOnly?: boolean, approvedCopy?: object, wizard?: object, onProgress?: (update: object) => void }} params
  */
 export async function runAdGeneration({
   offer,
   overrides = {},
   runId = timestampSlug(),
   storyboardOnly = false,
+  copyOnly = false,
+  approvedCopy = null,
+  wizard = null,
   onProgress,
 }) {
   const progress = (step, message, extra = {}) => {
@@ -43,19 +47,63 @@ export async function runAdGeneration({
 
   progress("config", formatAdConfigSummary(adConfig), { adConfig, offer });
 
-  progress("storyboard", "A gerar storyboard com Gemini...");
-  const storyboard = await generateStoryboard({ offer, adConfig });
+  if (copyOnly) {
+    progress("copy", "A escrever copy — hook, argumento e CTA...");
+    const copy = await generateAdCopy({
+      offer,
+      overrides: adConfig,
+      wizard: wizard || overrides.wizard || {},
+    });
+    const copyPath = path.join(config.outputDir, `copy-${runId}.json`);
+    await fs.writeFile(copyPath, JSON.stringify(copy, null, 2));
+    progress("done", "Copy pronta para revisão.");
+    return { runId, copy, copyPath, adConfig };
+  }
+
+  let copy = approvedCopy;
+  if (!copy && overrides.useCopyFirst !== false) {
+    progress("copy", "A escrever copy — hook, argumento e CTA...");
+    copy = await generateAdCopy({
+      offer,
+      overrides: adConfig,
+      wizard: wizard || overrides.wizard || {},
+    });
+  }
+
+  let storyboard;
+  if (copy) {
+    progress(
+      "storyboard",
+      `A planear ${copy.targetDurationSeconds ? `~${copy.targetDurationSeconds}s · ` : ""}cenas a partir da copy...`,
+    );
+    storyboard = await generateStoryboardFromCopy({
+      offer,
+      copy,
+      adConfig: adConfig,
+    });
+  } else {
+    progress("storyboard", "A gerar storyboard com Gemini...");
+    storyboard = await generateStoryboard({ offer, adConfig });
+  }
 
   const storyboardPath = path.join(PROJECT_ROOT, "prompts", `storyboard-${runId}.json`);
   await fs.mkdir(path.dirname(storyboardPath), { recursive: true });
   await fs.writeFile(storyboardPath, JSON.stringify(storyboard, null, 2));
 
   if (storyboardOnly) {
+    const copyPath = copy
+      ? path.join(config.outputDir, `copy-${runId}.json`)
+      : null;
+    if (copy && copyPath) {
+      await fs.writeFile(copyPath, JSON.stringify(copy, null, 2));
+    }
     return {
       runId,
       storyboardPath,
       storyboard,
       adConfig,
+      copy,
+      copyPath,
     };
   }
 
@@ -195,9 +243,11 @@ export async function runAdGeneration({
   }
 
   const copyPath = path.join(config.outputDir, `copy-${runId}.json`);
-  const copy = {
+  const exportCopy = copy || {
     title: storyboard.title,
     voiceover: storyboard.voiceover,
+    hook: storyboard.hook,
+    cta: storyboard.cta,
     language: adConfig.languageVariant || adConfig.language,
     style: storyboard.style,
     parts: storyboard.scenes.map((s) => ({
@@ -207,7 +257,7 @@ export async function runAdGeneration({
     })),
   };
 
-  await fs.writeFile(copyPath, JSON.stringify(copy, null, 2));
+  await fs.writeFile(copyPath, JSON.stringify(exportCopy, null, 2));
 
   progress("done", "Anúncio concluído.", { finalVideo, copyPath });
 
@@ -218,7 +268,7 @@ export async function runAdGeneration({
     adConfig,
     finalVideo,
     copyPath,
-    copy,
+    copy: exportCopy,
     manifest,
   };
 }

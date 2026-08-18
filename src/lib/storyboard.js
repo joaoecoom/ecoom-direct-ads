@@ -258,3 +258,150 @@ ${JSON.stringify(schema, null, 2)}`;
 
   return storyboard;
 }
+
+function normalizeStoryboardTiming(storyboard, adConfig) {
+  const scenes = storyboard.scenes || [];
+  const clipDuration =
+    storyboard.clipDurationSeconds ||
+    storyboard.config?.clipDurationSeconds ||
+    adConfig.clipDurationSeconds ||
+    8;
+
+  storyboard.scenes = scenes.map((s, i) => ({
+    ...s,
+    id: s.id || `parte-${i + 1}`,
+    clipDurationSeconds: s.clipDurationSeconds || clipDuration,
+  }));
+
+  const sceneCount = storyboard.scenes.length;
+  storyboard.config = {
+    ...adConfig,
+    ...storyboard.config,
+    sceneCount,
+    clipDurationSeconds: clipDuration,
+    totalDurationSeconds: sceneCount * clipDuration,
+    style: adConfig.style,
+  };
+  storyboard.aspectRatio = adConfig.aspectRatio;
+  storyboard.durationSeconds = clipDuration;
+  storyboard.totalDurationSeconds = sceneCount * clipDuration;
+  storyboard.resolution = adConfig.resolution;
+  storyboard.language = adConfig.language;
+  storyboard.languageVariant = adConfig.languageVariant;
+  storyboard.tone = adConfig.tone;
+  storyboard.style = adConfig.style;
+
+  return storyboard;
+}
+
+/**
+ * Storyboard a partir de copy aprovada — IA decide cenas, duração/clip e prompts por cena.
+ */
+export async function generateStoryboardFromCopy({
+  offer,
+  copy,
+  adConfig: adConfigOverrides = {},
+}) {
+  const adConfig = resolveAdConfig({
+    ...adConfigOverrides,
+    sceneCount: adConfigOverrides.sceneCount || 3,
+  });
+
+  const model =
+    process.env.GEMINI_STORYBOARD_MODEL || "gemini-2.5-flash";
+  const client = createClient();
+  const styleRules = getStyleRules(adConfig);
+
+  const langNote =
+    adConfig.languageVariant === "pt-PT"
+      ? "OBRIGATÓRIO: PORTUGUÊS DE PORTUGAL (PT-PT)"
+      : adConfig.languageVariant === "pt-BR"
+        ? "OBRIGATÓRIO: PORTUGUÊS DO BRASIL (PT-BR)"
+        : adConfig.languageLabel;
+
+  const targetDuration =
+    copy.targetDurationSeconds ||
+    (copy.voiceover ? Math.ceil(copy.voiceover.split(/\s+/).length / 2.5) : null);
+
+  const systemPrompt = `És director criativo de vídeos UGC Direct Response.
+
+COPY JÁ APROVADA — não reescrevas o argumento principal, apenas divide em cenas filmáveis.
+
+IDIOMA voiceoverLine: ${langNote}
+FORMATO: ${adConfig.aspectRatio} · Resolução: ${adConfig.resolution}
+ESTILO: ${adConfig.style} · TOM: ${adConfig.tone}
+${styleRules}
+
+REGRAS DE ESTRUTURA (TU DECIDES):
+- Número de cenas: o que a copy precisar (tipicamente 3–12; mais se copy longa)
+- clipDurationSeconds global: 4, 6, 8 ou 10 — o que encaixar melhor na fala
+- Cada voiceoverLine deve caber confortavelmente no clip
+- imagePrompt EN detalhado; motionPrompt EN só movimento visual
+- Flow contínuo UGC: mesma personagem/cenário
+
+Responde APENAS JSON:
+{
+  "title": "string",
+  "hook": "string",
+  "cta": "string",
+  "voiceover": "copy completa (pode igual à aprovada)",
+  "clipDurationSeconds": 8,
+  "characterBrief": "EN se ugc",
+  "settingBrief": "EN se ugc",
+  "scenes": [
+    {
+      "id": "parte-1",
+      "role": "hook | problema | solução | prova | cta",
+      "voiceoverLine": "fala desta cena",
+      "visualBeat": "EN",
+      "imagePrompt": "EN",
+      "motionPrompt": "EN com for a X second clip",
+      "onScreenText": "PT ou vazio"
+    }
+  ]
+}`;
+
+  const userPrompt = `Brief original:\n${offer}\n\nCOPY APROVADA:\nTítulo: ${copy.title || ""}\nHook: ${copy.hook || ""}\nVoiceover:\n${copy.voiceover}\nCTA: ${copy.cta || ""}\n${targetDuration ? `Duração alvo ~${targetDuration}s` : ""}\n\nDivide em cenas com prompts de imagem e animação.`;
+
+  console.log("\n🎬 Gemini a planear cenas a partir da copy...");
+
+  const response = await client.models.generateContent({
+    model,
+    contents: userPrompt,
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      temperature: 0.4,
+    },
+  });
+
+  const raw = response.text;
+  if (!raw) throw new Error("Gemini não devolveu storyboard.");
+
+  let storyboard = parseJsonResponse(raw);
+  if (!storyboard.scenes?.length) {
+    throw new Error("Storyboard inválido: falta cenas.");
+  }
+
+  storyboard = applyUgcRules(storyboard, adConfig);
+  storyboard = normalizeStoryboardTiming(storyboard, {
+    ...adConfig,
+    clipDurationSeconds:
+      storyboard.clipDurationSeconds || adConfig.clipDurationSeconds,
+  });
+  storyboard.generatedAt = new Date().toISOString();
+  storyboard.offer = offer;
+  storyboard.sourceCopy = {
+    title: copy.title,
+    hook: copy.hook,
+    voiceover: copy.voiceover,
+    cta: copy.cta,
+  };
+  storyboard.model = model;
+
+  console.log(
+    `✅ Storyboard: ${storyboard.scenes.length} cenas × ${storyboard.durationSeconds}s\n`,
+  );
+
+  return storyboard;
+}

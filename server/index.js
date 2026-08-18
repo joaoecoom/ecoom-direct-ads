@@ -95,6 +95,7 @@ app.get("/api/config", (_req, res) => {
       sceneEditor: true,
       export: true,
       liveProgress: true,
+      briefWizard: true,
       maxSceneCount: MAX_SCENE_COUNT,
     },
   });
@@ -215,15 +216,50 @@ app.post("/api/projects/:id/blueprint", async (req, res) => {
   if (!offer) return res.status(400).json({ error: "Master prompt em falta" });
 
   const overrides = { ...project.settings, ...req.body?.overrides };
+  const wizard = req.body?.wizard || {};
+  const approvedCopy = req.body?.approvedCopy || null;
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
     type: "blueprint",
-    request: { type: "blueprint", offer, overrides, projectId: req.params.id },
+    request: {
+      type: "blueprint",
+      offer,
+      overrides,
+      wizard,
+      approvedCopy,
+      projectId: req.params.id,
+    },
   });
 
   enqueue(id);
   res.status(202).json({ jobId: id, status: "queued", type: "blueprint" });
+});
+
+app.post("/api/projects/:id/copy", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const offer = (req.body?.offer || project.masterPrompt || "").trim();
+  if (!offer) return res.status(400).json({ error: "Brief em falta" });
+
+  const overrides = { ...project.settings, ...req.body?.overrides };
+  const wizard = req.body?.wizard || {};
+  const id = randomUUID().slice(0, 8);
+  await createJob({
+    id,
+    type: "copy",
+    request: {
+      type: "copy",
+      offer,
+      overrides,
+      wizard,
+      projectId: req.params.id,
+    },
+  });
+
+  enqueue(id);
+  res.status(202).json({ jobId: id, status: "queued", type: "copy" });
 });
 
 app.post("/api/projects/:id/images/generate", async (req, res) => {
@@ -478,6 +514,8 @@ app.post("/api/jobs", async (req, res) => {
       type: "full_ad",
       offer: offer.trim(),
       overrides,
+      wizard: req.body?.wizard || null,
+      approvedCopy: req.body?.approvedCopy || null,
       projectId: projectId || null,
     },
   });

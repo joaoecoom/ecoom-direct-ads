@@ -1,8 +1,9 @@
 import { fetchJob } from "./api.js";
 
 const PIPELINE_BY_TYPE = {
-  full_ad: ["queued", "config", "storyboard", "image", "video", "voice", "lipsync", "mix", "done"],
-  blueprint: ["queued", "storyboard", "done"],
+  full_ad: ["queued", "copy", "storyboard", "image", "video", "voice", "lipsync", "mix", "done"],
+  blueprint: ["queued", "copy", "storyboard", "done"],
+  copy: ["queued", "copy", "done"],
   images: ["queued", "image", "done"],
   scene_image: ["queued", "image", "done"],
   videos: ["queued", "video", "done"],
@@ -14,6 +15,7 @@ const STEP_LABELS = {
   queued: "Fila",
   starting: "Início",
   config: "Config",
+  copy: "Copy",
   storyboard: "Storyboard",
   image: "Imagens",
   video: "Veo",
@@ -23,6 +25,22 @@ const STEP_LABELS = {
   rebuild: "FFmpeg",
   done: "Pronto",
   error: "Erro",
+};
+
+const HUMAN_STEP_INTRO = {
+  queued: "Na fila — a aguardar turno…",
+  starting: "A arrancar o job…",
+  config: "A aplicar configuração do anúncio…",
+  copy: "A escrever copy — hook, argumento e CTA…",
+  storyboard: "A planear cenas, prompts e timing…",
+  image: "A gerar imagens das cenas…",
+  video: "A animar clips com Veo…",
+  voice: "A gerar voiceover…",
+  lipsync: "A sincronizar lábios…",
+  mix: "A misturar áudio e vídeo…",
+  rebuild: "A remontar timeline final…",
+  done: "Concluído.",
+  error: "Algo correu mal.",
 };
 
 let pollTimer = null;
@@ -56,6 +74,24 @@ function renderSteps(container, steps, currentStep, status) {
       return `<span class="${cls}">${STEP_LABELS[step] || step}</span>`;
     })
     .join("");
+}
+
+function buildCurrentLine(job) {
+  const step = job.progress?.step || (job.status === "queued" ? "queued" : "starting");
+  const base = HUMAN_STEP_INTRO[step] || job.progress?.message || job.status;
+  const msg = job.progress?.message?.trim();
+  const scene =
+    job.progress?.sceneIndex && job.progress?.sceneTotal
+      ? ` · cena ${job.progress.sceneIndex}/${job.progress.sceneTotal}`
+      : "";
+
+  if (msg && msg !== base && !msg.startsWith("A ")) {
+    return `${base}${scene} — ${msg}`;
+  }
+  if (msg && step !== "queued") {
+    return `${base}${scene}${msg.includes("…") ? "" : ` — ${msg}`}`;
+  }
+  return `${base}${scene}`;
 }
 
 function appendLog(container, job) {
@@ -116,11 +152,27 @@ function updateProgressBar(job) {
 function updateHeader(job) {
   const dot = document.getElementById("ws-job-dot");
   const title = document.getElementById("ws-job-title");
+  const current = document.getElementById("ws-job-current");
   const message = document.getElementById("ws-job-message");
   const type = job.type || job.request?.type || "job";
+  const typeLabel = STEP_LABELS[type] || type;
 
-  if (title) title.textContent = `Job ${job.id} · ${type}`;
-  if (message) message.textContent = job.progress?.message || job.status;
+  if (title) {
+    title.textContent =
+      job.status === "completed"
+        ? "Concluído"
+        : job.status === "failed"
+          ? "Falhou"
+          : "A processar…";
+  }
+
+  const line = buildCurrentLine(job);
+  if (current) current.textContent = line;
+  if (message) {
+    message.textContent = job.error
+      ? job.error
+      : `Job ${job.id} · ${typeLabel}`;
+  }
 
   if (dot) {
     dot.className = "dot";
@@ -166,14 +218,14 @@ export function trackJob(jobId, options = {}) {
 
   const failMissing = () => {
     stopJobTracking();
-    const msg = "Job perdido no servidor — clica Generate outra vez.";
+    const msg = "Job perdido no servidor — tenta gerar outra vez.";
     if (log) {
       appendLog(log, {
         status: "failed",
         progress: { step: "error", message: msg },
       });
     }
-    updateHeader({ id: jobId, status: "failed", progress: { message: msg } });
+    updateHeader({ id: jobId, status: "failed", progress: { message: msg, step: "error" } });
     onMissing?.(msg);
     onFailed?.({ id: jobId, status: "failed", error: msg });
   };
@@ -198,6 +250,7 @@ export function trackJob(jobId, options = {}) {
       stopJobTracking();
       renderSteps(stepsEl, steps, "done", "completed");
       updateProgressBar({ ...job, status: "completed", progress: { step: "done" } });
+      updateHeader({ ...job, status: "completed", progress: { step: "done", message: "Pronto." } });
       onComplete?.(job);
     }
 
@@ -209,6 +262,7 @@ export function trackJob(jobId, options = {}) {
           progress: { step: "error", message: job.error || "Falhou" },
         });
       }
+      updateHeader(job);
       onFailed?.(job);
     }
   };

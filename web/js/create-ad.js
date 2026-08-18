@@ -3,22 +3,24 @@ import {
   fetchConfig,
   fetchJob,
   fetchJobCopy,
+  generateCopy,
   jobVideoUrl,
 } from "./api.js";
-import { trackJob, stopJobTracking } from "./job-activity.js";
 import {
-  calcSceneCount,
-  calcTotalDuration,
-  getProject,
-  linkJobToProject,
-  TOTAL_DURATION_PRESETS,
-  updateProject,
-} from "./projects.js";
+  getBuiltBrief,
+  getWizardState,
+  initBriefWizard,
+  loadWizardFromProject,
+  setWizardConfig,
+} from "./brief-wizard.js";
+import { formatCopyForDisplay, wizardToSettings } from "./prompt-template.js";
+import { trackJob, stopJobTracking } from "./job-activity.js";
+import { getProject, linkJobToProject, updateProject } from "./projects.js";
 
-let pollTimer = null;
 let config = null;
 let activeProjectId = null;
-let maxSceneCount = 150;
+let approvedCopy = null;
+let wizardReady = false;
 
 const els = {};
 
@@ -26,24 +28,26 @@ export function initCreateAd(projectId) {
   activeProjectId = projectId;
   cacheElements();
   bindEvents();
+  initBriefWizard({
+    container: document.getElementById("brief-wizard-root"),
+    onChange: onWizardChange,
+  });
   loadConfig();
 }
 
 function cacheElements() {
   els.form = document.getElementById("create-ad-form");
-  els.offer = document.getElementById("master-prompt");
-  els.language = document.getElementById("language");
-  els.variant = document.getElementById("variant");
-  els.format = document.getElementById("format");
-  els.scenes = document.getElementById("scenes");
-  els.duration = document.getElementById("duration");
-  els.totalDuration = document.getElementById("total-duration");
-  els.customDurationWrap = document.getElementById("custom-duration-wrap");
-  els.customDuration = document.getElementById("custom-duration");
-  els.resolution = document.getElementById("resolution");
-  els.tone = document.getElementById("tone");
-  els.style = document.getElementById("style");
-  els.submitBtn = document.getElementById("submit-btn");
+  els.briefPreview = document.getElementById("brief-preview");
+  els.briefSection = document.getElementById("brief-review-section");
+  els.wizardSection = document.getElementById("wizard-section");
+  els.copyReview = document.getElementById("copy-review-section");
+  els.copyHook = document.getElementById("copy-hook");
+  els.copyVoiceover = document.getElementById("copy-voiceover");
+  els.copyCta = document.getElementById("copy-cta");
+  els.copyMeta = document.getElementById("copy-meta");
+  els.genCopyBtn = document.getElementById("btn-gen-copy");
+  els.genVideoBtn = document.getElementById("submit-btn");
+  els.editBriefBtn = document.getElementById("btn-edit-brief");
   els.error = document.getElementById("create-error");
   els.jobPanel = document.getElementById("job-panel");
   els.statusDot = document.getElementById("status-dot");
@@ -53,121 +57,55 @@ function cacheElements() {
   els.resultVideo = document.getElementById("result-video");
   els.copyHeading = document.getElementById("copy-heading");
   els.copyBlock = document.getElementById("copy-block");
-  els.sceneHint = document.getElementById("scene-hint");
 }
 
 function bindEvents() {
-  if (els.form.dataset.bound) return;
+  if (els.form?.dataset.bound) return;
   els.form.dataset.bound = "1";
 
-  els.language?.addEventListener("change", () => {
-    updateVariants();
-    persistSettings();
+  els.briefPreview?.addEventListener("input", () => {
+    if (activeProjectId) {
+      void updateProject(activeProjectId, { masterPrompt: els.briefPreview.value.trim() });
+    }
   });
-  els.variant?.addEventListener("change", persistSettings);
-  els.format?.addEventListener("change", persistSettings);
-  els.resolution?.addEventListener("change", persistSettings);
-  els.tone?.addEventListener("change", persistSettings);
-  els.style?.addEventListener("change", persistSettings);
-  els.duration?.addEventListener("change", syncSceneFromTotal);
-  els.totalDuration?.addEventListener("change", onTotalDurationChange);
-  els.customDuration?.addEventListener("input", syncSceneFromTotal);
-  els.scenes?.addEventListener("change", onScenesManualChange);
-  els.scenes?.addEventListener("input", onScenesManualChange);
-  els.offer?.addEventListener(
-    "blur",
-    () => {
-      if (!activeProjectId || !els.offer) return;
-      updateProject(activeProjectId, { masterPrompt: els.offer.value.trim() });
-    },
-    { passive: true },
-  );
 
-  els.form.addEventListener("submit", onSubmit);
+  els.editBriefBtn?.addEventListener("click", () => {
+    els.briefSection?.classList.add("hidden");
+    els.wizardSection?.classList.remove("hidden");
+  });
+
+  els.genCopyBtn?.addEventListener("click", () => void onGenerateCopy());
+  els.genVideoBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    void onGenerateVideo();
+  });
 }
 
-function fillSelect(el, items, getValue, getLabel) {
-  if (!el) return;
-  el.innerHTML = "";
-  for (const item of items) {
-    const opt = document.createElement("option");
-    opt.value = getValue(item);
-    opt.textContent = getLabel(item);
-    el.appendChild(opt);
+function onWizardChange({ complete, brief }) {
+  if (brief && els.briefPreview) {
+    els.briefPreview.value = brief;
+  }
+  if (complete) {
+    showBriefReview();
+    persistWizard();
+  } else if (wizardReady) {
+    persistWizard();
   }
 }
 
-function updateVariants() {
-  if (!config || !els.variant) return;
-  const lang = els.language.value;
-  const variants = config.languageVariants[lang] || [lang];
-  fillSelect(els.variant, variants, (v) => v, (v) => v);
+function showBriefReview() {
+  els.wizardSection?.classList.add("hidden");
+  els.briefSection?.classList.remove("hidden");
+  if (els.briefPreview) els.briefPreview.value = getBuiltBrief();
+  if (els.genCopyBtn) els.genCopyBtn.disabled = false;
 }
 
-function onTotalDurationChange() {
-  const isCustom = els.totalDuration.value === "custom";
-  els.customDurationWrap?.classList.toggle("hidden", !isCustom);
-  syncSceneFromTotal();
-}
-
-function getTotalSeconds() {
-  if (els.totalDuration.value === "custom") {
-    return Number.parseInt(els.customDuration.value, 10) || 24;
-  }
-  return Number.parseInt(els.totalDuration.value, 10);
-}
-
-function clampScenesInput(n) {
-  const max = maxSceneCount;
-  const min = config?.sceneCountRange?.min || 1;
-  return Math.max(min, Math.min(max, Number.parseInt(String(n), 10) || min));
-}
-
-function syncSceneFromTotal() {
-  const clip = Number.parseInt(els.duration.value, 10) || 8;
-  const total = getTotalSeconds();
-  const suggested = calcSceneCount(total, clip, maxSceneCount);
-  els.scenes.value = String(suggested);
-  if (els.scenes.max !== String(maxSceneCount)) {
-    els.scenes.max = String(maxSceneCount);
-    els.scenes.min = "1";
-  }
-  updateSceneHint(total, clip, suggested);
-  persistSettings();
-}
-
-function onScenesManualChange() {
-  const clip = Number.parseInt(els.duration.value, 10) || 8;
-  const scenes = clampScenesInput(els.scenes.value);
-  els.scenes.value = String(scenes);
-  const total = calcTotalDuration(scenes, clip);
-  els.sceneHint.textContent = `Total estimado: ~${total}s (${scenes} × ${clip}s) · máx. ${maxSceneCount} cenas`;
-  persistSettings();
-}
-
-function updateSceneHint(total, clip, suggested) {
-  const ideal = Math.ceil(total / clip);
-  let hint = `Total alvo: ${total}s → ${suggested} cenas (${clip}s cada)`;
-  if (ideal > maxSceneCount) {
-    hint += ` · Limite actual: ${maxSceneCount} cenas (${maxSceneCount * clip}s)`;
-  }
-  els.sceneHint.textContent = hint;
-}
-
-function persistSettings() {
+function persistWizard() {
   if (!activeProjectId) return;
+  const wizard = getWizardState();
   void updateProject(activeProjectId, {
-    settings: {
-      language: els.language.value,
-      languageVariant: els.variant.value,
-      aspectRatio: els.format.value,
-      clipDurationSeconds: Number(els.duration.value),
-      sceneCount: clampScenesInput(els.scenes.value),
-      totalDurationSeconds: getTotalSeconds(),
-      resolution: els.resolution.value,
-      tone: els.tone.value,
-      style: els.style.value,
-    },
+    masterPrompt: getBuiltBrief(),
+    settings: wizardToSettings(wizard, config),
   });
 }
 
@@ -177,65 +115,31 @@ export function refreshCreateAdForm(projectId) {
   const project = getProject(projectId);
   if (!project) return;
 
-  els.offer.value = project.masterPrompt || "";
-  const s = project.settings || {};
-  if (s.language) els.language.value = s.language;
-  updateVariants();
-  if (s.languageVariant) els.variant.value = s.languageVariant;
-  if (s.aspectRatio) els.format.value = s.aspectRatio;
-  if (s.clipDurationSeconds) els.duration.value = String(s.clipDurationSeconds);
-  if (s.sceneCount) els.scenes.value = String(clampScenesInput(s.sceneCount));
-  if (s.resolution) els.resolution.value = s.resolution;
-  if (s.tone && els.tone) els.tone.value = s.tone;
-  if (s.style && els.style) els.style.value = s.style;
+  loadWizardFromProject(project);
+  setWizardConfig(config);
+  wizardReady = true;
 
-  const total = s.totalDurationSeconds || calcTotalDuration(s.sceneCount || 3, s.clipDurationSeconds || 8);
-  const preset = TOTAL_DURATION_PRESETS.find((p) => p.id === total);
-  els.totalDuration.value = preset ? String(preset.id) : "custom";
-  els.customDurationWrap?.classList.toggle("hidden", preset != null);
-  if (!preset) els.customDuration.value = String(total);
-  syncSceneFromTotal();
+  if (project.masterPrompt?.includes("## Produto")) {
+    if (els.briefPreview) els.briefPreview.value = project.masterPrompt;
+    showBriefReview();
+  } else if (project.masterPrompt && els.briefPreview) {
+    els.briefPreview.value = project.masterPrompt;
+  }
+
+  if (project.latestCopy) {
+    showCopyReview(project.latestCopy);
+  } else {
+    els.copyReview?.classList.add("hidden");
+    approvedCopy = null;
+  }
 }
 
 async function loadConfig() {
   try {
     config = await fetchConfig();
-    maxSceneCount =
-      config.features?.maxSceneCount ||
-      config.sceneCountRange?.max ||
-      150;
-
-    if (els.scenes) {
-      els.scenes.max = String(maxSceneCount);
-      els.scenes.min = "1";
-    }
-
-    fillSelect(els.language, config.languages, (l) => l.id, (l) => l.label);
-    fillSelect(els.format, config.aspectRatios, (a) => a.id, (a) => a.label);
-    fillSelect(els.duration, config.clipDurations, (n) => n, (n) => `${n}s`);
-    fillSelect(
-      els.resolution,
-      config.resolutions,
-      (r) => r.id,
-      (r) => r.label,
-    );
-    fillSelect(els.tone, config.tones, (t) => t.id, (t) => t.label);
-    fillSelect(els.style, config.styles, (s) => s.id, (s) => s.label);
-    fillSelect(
-      els.totalDuration,
-      TOTAL_DURATION_PRESETS,
-      (p) => String(p.id),
-      (p) => p.label,
-    );
-
+    setWizardConfig(config);
+    wizardReady = true;
     if (activeProjectId) refreshCreateAdForm(activeProjectId);
-    else {
-      els.language.value = "pt";
-      updateVariants();
-      els.variant.value = "pt-BR";
-      els.totalDuration.value = "30";
-      syncSceneFromTotal();
-    }
   } catch {
     showError("API indisponível. Confirma que a VPS está no ar.");
   }
@@ -264,50 +168,135 @@ function setJobUI(job) {
   }
 }
 
-async function onSubmit(e) {
-  e.preventDefault();
-  hideError();
-  persistSettings();
+function showCopyReview(copy) {
+  approvedCopy = { ...copy };
+  els.copyReview?.classList.remove("hidden");
+  if (els.copyHook) els.copyHook.value = copy.hook || "";
+  if (els.copyVoiceover) els.copyVoiceover.value = copy.voiceover || "";
+  if (els.copyCta) els.copyCta.value = copy.cta || "";
+  if (els.copyMeta) {
+    const parts = [];
+    if (copy.targetDurationSeconds) parts.push(`~${copy.targetDurationSeconds}s`);
+    if (copy.persona) parts.push(copy.persona);
+    els.copyMeta.textContent = parts.join(" · ") || "Copy pronta — revê antes de gerar vídeo.";
+  }
+  if (els.genVideoBtn) els.genVideoBtn.disabled = false;
+}
 
-  const prompt = els.offer.value.trim();
-  if (!prompt) {
-    showError("Master Creative Prompt é obrigatório.");
+function readApprovedCopyFromForm() {
+  return {
+    ...approvedCopy,
+    hook: els.copyHook?.value?.trim() || approvedCopy?.hook,
+    voiceover: els.copyVoiceover?.value?.trim() || approvedCopy?.voiceover,
+    cta: els.copyCta?.value?.trim() || approvedCopy?.cta,
+  };
+}
+
+function getBrief() {
+  return (els.briefPreview?.value || getBuiltBrief()).trim();
+}
+
+async function onGenerateCopy() {
+  hideError();
+  const brief = getBrief();
+  if (!brief) {
+    showError("Completa o brief antes de gerar copy.");
+    return;
+  }
+  if (!activeProjectId) {
+    showError("Selecciona um projecto.");
     return;
   }
 
-  if (activeProjectId) {
-    void updateProject(activeProjectId, { masterPrompt: prompt });
-  }
+  persistWizard();
+  void updateProject(activeProjectId, { masterPrompt: brief });
 
-  els.submitBtn.disabled = true;
-  els.submitBtn.textContent = "A enviar...";
-  els.videoWrap.classList.add("hidden");
-  els.copyHeading.classList.add("hidden");
-  els.copyBlock.classList.add("hidden");
+  els.genCopyBtn.disabled = true;
+  els.genCopyBtn.textContent = "A gerar copy…";
 
   try {
-    const data = await createJob({
-      offer: prompt,
-      projectId: activeProjectId || undefined,
-      language: els.language.value,
-      languageVariant: els.variant.value,
-      aspectRatio: els.format.value,
-      sceneCount: clampScenesInput(els.scenes.value),
-      clipDurationSeconds: Number(els.duration.value),
-      resolution: els.resolution.value,
-      tone: els.tone.value,
-      style: els.style.value,
+    const wizard = getWizardState();
+    const settings = wizardToSettings(wizard, config);
+    const data = await generateCopy(activeProjectId, {
+      offer: brief,
+      overrides: settings,
+      wizard,
     });
 
-    if (activeProjectId) void linkJobToProject(activeProjectId, data.jobId);
+    void linkJobToProject(activeProjectId, data.jobId);
+    setJobUI({ id: data.jobId, status: "queued", progress: { message: "Na fila…" } });
 
+    trackJob(data.jobId, {
+      jobType: "copy",
+      pollMs: 1000,
+      onUpdate: setJobUI,
+      onMissing: (msg) => showError(msg),
+      onComplete: async () => {
+        const copy = await fetchJobCopy(data.jobId);
+        if (copy) {
+          showCopyReview(copy);
+        }
+        els.genCopyBtn.disabled = false;
+        els.genCopyBtn.textContent = "Gerar Copy";
+        window.dispatchEvent(
+          new CustomEvent("ecoom:copy-ready", { detail: { projectId: activeProjectId } }),
+        );
+      },
+      onFailed: (job) => {
+        setJobUI(job);
+        showError(job.error || "Copy falhou");
+        els.genCopyBtn.disabled = false;
+        els.genCopyBtn.textContent = "Gerar Copy";
+      },
+    });
+  } catch (err) {
+    showError(err.message || "Erro desconhecido");
+    els.genCopyBtn.disabled = false;
+    els.genCopyBtn.textContent = "Gerar Copy";
+  }
+}
+
+async function onGenerateVideo() {
+  hideError();
+  const brief = getBrief();
+  const copy = readApprovedCopyFromForm();
+
+  if (!brief) {
+    showError("Brief em falta.");
+    return;
+  }
+  if (!copy?.voiceover?.trim()) {
+    showError("Gera e aprova a copy primeiro.");
+    return;
+  }
+
+  persistWizard();
+  approvedCopy = copy;
+
+  els.genVideoBtn.disabled = true;
+  els.genVideoBtn.textContent = "A gerar…";
+  els.videoWrap?.classList.add("hidden");
+  els.copyHeading?.classList.add("hidden");
+  els.copyBlock?.classList.add("hidden");
+
+  try {
+    const wizard = getWizardState();
+    const settings = wizardToSettings(wizard, config);
+    const data = await createJob({
+      offer: brief,
+      projectId: activeProjectId,
+      approvedCopy: copy,
+      wizard,
+      ...settings,
+    });
+
+    void linkJobToProject(activeProjectId, data.jobId);
     const job = (await fetchJob(data.jobId)) || {
       id: data.jobId,
       status: "queued",
-      progress: { message: "Na fila..." },
+      progress: { message: "Na fila…" },
     };
     setJobUI(job);
-    els.submitBtn.textContent = "A gerar...";
 
     trackJob(data.jobId, {
       jobType: "full_ad",
@@ -318,37 +307,34 @@ async function onSubmit(e) {
         setJobUI(completedJob);
         els.resultVideo.src = `${jobVideoUrl(data.jobId)}?t=${Date.now()}`;
         els.videoWrap.classList.remove("hidden");
-        const copy = await fetchJobCopy(data.jobId);
-        if (copy) {
-          els.copyBlock.textContent = copy.voiceover || JSON.stringify(copy, null, 2);
+        const resultCopy = await fetchJobCopy(data.jobId);
+        if (resultCopy) {
+          els.copyBlock.textContent = formatCopyForDisplay(resultCopy);
           els.copyHeading.classList.remove("hidden");
           els.copyBlock.classList.remove("hidden");
         }
-        els.submitBtn.disabled = false;
-        els.submitBtn.textContent = "Generate Creative";
-        if (activeProjectId) {
-          window.dispatchEvent(
-            new CustomEvent("ecoom:job-complete", {
-              detail: { projectId: activeProjectId, jobId: data.jobId },
-            }),
-          );
-        }
+        els.genVideoBtn.disabled = false;
+        els.genVideoBtn.textContent = "Gerar Vídeo Completo";
+        window.dispatchEvent(
+          new CustomEvent("ecoom:job-complete", {
+            detail: { projectId: activeProjectId, jobId: data.jobId },
+          }),
+        );
       },
       onFailed: (failedJob) => {
         setJobUI(failedJob);
         showError(failedJob.error || "Geração falhou");
-        els.submitBtn.disabled = false;
-        els.submitBtn.textContent = "Generate Creative";
+        els.genVideoBtn.disabled = false;
+        els.genVideoBtn.textContent = "Gerar Vídeo Completo";
       },
     });
   } catch (err) {
     showError(err.message || "Erro desconhecido");
-    els.submitBtn.disabled = false;
-    els.submitBtn.textContent = "Generate Creative";
+    els.genVideoBtn.disabled = false;
+    els.genVideoBtn.textContent = "Gerar Vídeo Completo";
   }
 }
 
 export function destroyCreateAd() {
-  if (pollTimer) clearInterval(pollTimer);
   stopJobTracking();
 }

@@ -61,6 +61,17 @@ export async function apiDuplicateProject(id) {
   return data;
 }
 
+export async function generateCopy(projectId, body = {}) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/copy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Geração de copy falhou");
+  return data;
+}
+
 export async function createJob(payload) {
   const res = await fetch(`${API_URL}/api/jobs`, {
     method: "POST",
