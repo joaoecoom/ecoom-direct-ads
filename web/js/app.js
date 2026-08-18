@@ -14,7 +14,14 @@ import { destroyVideosTab, initVideosTab, renderVideosPanel } from "./videos.js"
 import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./timeline.js";
 import { destroyExportTab, initExportTab, renderExportPanel } from "./export.js";
 import { initCreativesRail, renderCreativesRail } from "./creatives.js";
-import { assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
+import { destroyAssetsHub, initAssetsHub, renderAssetsHub } from "./assets-hub.js";
+import {
+  getEntryRoute,
+  getStartingPoint,
+  renderStartingPointCards,
+  STARTING_POINTS,
+} from "./starting-point.js";
+import { createCreative, assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
 
 const views = {
   projects: document.getElementById("view-projects"),
@@ -31,7 +38,14 @@ const modal = document.getElementById("new-project-modal");
 const newProjectForm = document.getElementById("new-project-form");
 const newProjectName = document.getElementById("new-project-name");
 const newProjectPrompt = document.getElementById("new-project-prompt");
+const spStepPick = document.getElementById("new-project-step-pick");
+const spStepDetails = document.getElementById("new-project-step-details");
+const startingPointGrid = document.getElementById("starting-point-grid");
 const apiStatusEl = document.getElementById("api-status");
+
+let selectedStartingPoint = "prompt";
+let assetsTabInitialized = false;
+let assetsTabProjectId = null;
 
 let currentProjectId = null;
 let createAdInitialized = false;
@@ -44,6 +58,7 @@ let timelineTabProjectId = null;
 let exportTabInitialized = false;
 let exportTabProjectId = null;
 let activeWorkspaceTab = "create";
+const entryRoutedProjects = new Set();
 
 function parseRoute() {
   const hash = location.hash.replace(/^#/, "") || "/projects";
@@ -186,7 +201,10 @@ function renderProjectWorkspace(id) {
 
   document.getElementById("project-title").textContent = project.name;
   document.getElementById("project-subtitle").textContent =
-    project.masterPrompt?.slice(0, 120) || "Define o Master Creative Prompt abaixo";
+    project.masterPrompt?.slice(0, 120) ||
+    (project.startingPoint && project.startingPoint !== "prompt"
+      ? `Entrada: ${getStartingPoint(project.startingPoint).titlePt}`
+      : "Define o Master Creative Prompt abaixo");
 
   if (imagesTabProjectId !== id) {
     imagesTabInitialized = false;
@@ -204,6 +222,10 @@ function renderProjectWorkspace(id) {
     exportTabInitialized = false;
     exportTabProjectId = id;
   }
+  if (assetsTabProjectId !== id) {
+    assetsTabInitialized = false;
+    assetsTabProjectId = id;
+  }
 
   if (!createAdInitialized) {
     initCreateAd(id);
@@ -214,8 +236,28 @@ function renderProjectWorkspace(id) {
 
   renderProjectTabs(id);
   initCreativesRail(id);
+
+  const route = getEntryRoute(project.startingPoint || "prompt");
+  if (!entryRoutedProjects.has(id)) {
+    activeWorkspaceTab = route.tab;
+    entryRoutedProjects.add(id);
+    queueMicrotask(() => {
+      window.dispatchEvent(
+        new CustomEvent("ecoom:starting-point", {
+          detail: {
+            projectId: id,
+            startingPoint: project.startingPoint || "prompt",
+            action: route.action,
+            tab: route.tab,
+          },
+        }),
+      );
+    });
+  }
+
   switchWorkspaceTab(activeWorkspaceTab);
   void renderBlueprint(id);
+  renderProjectCreateMenu(id);
 }
 
 function switchWorkspaceTab(tab) {
@@ -226,6 +268,15 @@ function switchWorkspaceTab(tab) {
   document.querySelectorAll("#workspace-tabs .tab[data-tab]").forEach((el) => {
     el.classList.toggle("active", el.dataset.tab === tab);
   });
+
+  if (tab === "assets" && currentProjectId) {
+    if (!assetsTabInitialized) {
+      initAssetsHub(currentProjectId);
+      assetsTabInitialized = true;
+    } else {
+      void renderAssetsHub(currentProjectId);
+    }
+  }
 
   if (tab === "images" && currentProjectId) {
     if (!imagesTabInitialized) {
@@ -364,14 +415,16 @@ function renderProjectTabs(id) {
   const exportReady = project?.latestExport?.assetId ? 1 : 0;
 
   tabsEl.innerHTML = `
-    <button type="button" class="tab active" data-tab="create">Create Ad</button>
+    <button type="button" class="tab" data-tab="assets">Assets</button>
+    <button type="button" class="tab" data-tab="create">Create Ad</button>
     <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab" data-tab="videos">Videos</button>
     <button type="button" class="tab" data-tab="timeline">Timeline</button>
     <button type="button" class="tab" data-tab="export">Export${exportReady ? " ✓" : ""}</button>
     <span class="tab-meta">${videoCount} vídeo(s) · ${escapeHtml(activeTitle)} · ${videosReady} clips</span>`;
 
-  tabsEl.querySelectorAll(".tab[data-tab]:not(.disabled)").forEach((btn) => {
+  tabsEl.querySelectorAll(".tab[data-tab]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === activeWorkspaceTab);
     btn.onclick = () => switchWorkspaceTab(btn.dataset.tab);
   });
 }
@@ -408,14 +461,99 @@ function formatDate(iso) {
   }
 }
 
+function renderProjectCreateMenu(projectId) {
+  const dropdown = document.getElementById("project-create-dropdown");
+  if (!dropdown) return;
+
+  dropdown.innerHTML = STARTING_POINTS.map(
+    (sp) => `
+    <button type="button" class="project-create-item" data-inproject-sp="${sp.id}">
+      <span>${sp.icon}</span>
+      <span>${sp.titlePt}</span>
+    </button>`,
+  ).join("");
+
+  dropdown.querySelectorAll("[data-inproject-sp]").forEach((btn) => {
+    btn.onclick = () => {
+      dropdown.classList.add("hidden");
+      void handleInProjectStartingPoint(btn.dataset.inprojectSp);
+    };
+  });
+}
+
+async function handleInProjectStartingPoint(startingPoint) {
+  if (!currentProjectId) return;
+  const route = getEntryRoute(startingPoint);
+  await updateProject(currentProjectId, { startingPoint });
+  activeWorkspaceTab = route.tab;
+  switchWorkspaceTab(route.tab);
+  window.dispatchEvent(
+    new CustomEvent("ecoom:starting-point", {
+      detail: {
+        projectId: currentProjectId,
+        startingPoint,
+        action: route.action,
+        tab: route.tab,
+      },
+    }),
+  );
+}
+
 function openNewProjectModal() {
+  selectedStartingPoint = "prompt";
+  renderStartingPointPicker();
+  spStepPick?.classList.remove("hidden");
+  spStepDetails?.classList.add("hidden");
   modal?.classList.remove("hidden");
+}
+
+function renderStartingPointPicker() {
+  if (!startingPointGrid) return;
+  startingPointGrid.innerHTML = renderStartingPointCards(selectedStartingPoint);
+  startingPointGrid.querySelectorAll("[data-sp]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedStartingPoint = btn.dataset.sp;
+      renderStartingPointPicker();
+      showNewProjectDetailsStep();
+    });
+  });
+}
+
+function showNewProjectDetailsStep() {
+  const sp = getStartingPoint(selectedStartingPoint);
+  spStepPick?.classList.add("hidden");
+  spStepDetails?.classList.remove("hidden");
+
+  document.getElementById("sp-selected-label").textContent = sp.titlePt;
+  document.getElementById("sp-details-title").textContent = "Nome do projecto";
+
+  const promptField = document.getElementById("sp-prompt-field");
+  const promptLabel = document.getElementById("sp-prompt-label");
+  const promptInput = newProjectPrompt;
+
+  const needsPrompt = ["prompt", "generate_image", "generate_video"].includes(selectedStartingPoint);
+  promptField?.classList.toggle("hidden", !needsPrompt);
+
+  if (selectedStartingPoint === "prompt") {
+    promptLabel.textContent = "Master Prompt";
+    promptInput.placeholder = "Cria um anúncio UGC de 60 segundos para...";
+  } else if (selectedStartingPoint === "generate_image") {
+    promptLabel.textContent = "Prompt da imagem (opcional)";
+    promptInput.placeholder = "Mulher portuguesa de 45 anos numa cozinha moderna...";
+  } else if (selectedStartingPoint === "generate_video") {
+    promptLabel.textContent = "Prompt do vídeo (opcional)";
+    promptInput.placeholder = "Pessoa a falar para câmara, estilo UGC...";
+  }
+
   newProjectName?.focus();
 }
 
 function closeNewProjectModal() {
   modal?.classList.add("hidden");
   newProjectForm?.reset();
+  spStepPick?.classList.remove("hidden");
+  spStepDetails?.classList.add("hidden");
+  selectedStartingPoint = "prompt";
 }
 
 async function checkApiStatus() {
@@ -436,17 +574,44 @@ document.getElementById("goto-images-tab")?.addEventListener("click", () => {
 });
 document.getElementById("sidebar-new-project")?.addEventListener("click", openNewProjectModal);
 document.getElementById("modal-cancel")?.addEventListener("click", closeNewProjectModal);
+document.getElementById("modal-cancel-2")?.addEventListener("click", closeNewProjectModal);
+document.getElementById("sp-back")?.addEventListener("click", () => {
+  spStepDetails?.classList.add("hidden");
+  spStepPick?.classList.remove("hidden");
+  renderStartingPointPicker();
+});
+document.getElementById("btn-project-create")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const dropdown = document.getElementById("project-create-dropdown");
+  dropdown?.classList.toggle("hidden");
+});
+document.addEventListener("click", () => {
+  document.getElementById("project-create-dropdown")?.classList.add("hidden");
+});
 modal?.addEventListener("click", (e) => {
   if (e.target === modal) closeNewProjectModal();
 });
 
 newProjectForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const project = await createProject(
-    newProjectName.value,
-    newProjectPrompt?.value || "",
-  );
+  const promptText = newProjectPrompt?.value?.trim() || "";
+  const isPromptMode = selectedStartingPoint === "prompt";
+  const project = await createProject(newProjectName.value, isPromptMode ? promptText : "", {
+    startingPoint: selectedStartingPoint,
+    entryPrompt: isPromptMode ? "" : promptText,
+  });
+
+  if (isApiEnabled() && selectedStartingPoint !== "prompt") {
+    try {
+      await createCreative(project.id, { title: "Creative 1" });
+      await initProjects();
+    } catch {
+      /* creative optional on first load */
+    }
+  }
+
   closeNewProjectModal();
+  activeWorkspaceTab = getEntryRoute(selectedStartingPoint).tab;
   navigate("project", project.id);
 });
 

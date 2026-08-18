@@ -1698,6 +1698,209 @@ video {
   width: 100%;
 }
 
+/* —— Creative Starting Point —— */
+.modal-wide {
+  max-width: 920px;
+  width: min(92vw, 920px);
+}
+
+.new-project-step h2 {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 1.45rem;
+}
+
+.sp-intro {
+  margin-bottom: 1.25rem;
+}
+
+.starting-point-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sp-card {
+  text-align: left;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 118px;
+}
+
+.sp-card:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
+}
+
+.sp-card.active {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.sp-card.featured {
+  grid-column: span 1;
+}
+
+.sp-card-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.sp-card-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.sp-card-desc {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.sp-modal-actions {
+  justify-content: flex-end;
+}
+
+.sp-back {
+  margin-bottom: 0.75rem;
+}
+
+.project-create-menu {
+  position: relative;
+}
+
+.project-create-dropdown {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  z-index: 40;
+  padding: 0.35rem;
+}
+
+.project-create-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-create-item:hover {
+  background: var(--surface-hover);
+}
+
+.assets-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.assets-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.assets-group-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 0.65rem;
+}
+
+.assets-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+}
+
+.asset-card {
+  padding: 0.55rem;
+  cursor: pointer;
+  text-align: left;
+  border: 1px solid var(--border);
+  transition: border-color 0.15s;
+}
+
+.asset-card.selected {
+  border-color: var(--accent);
+}
+
+.asset-card-thumb {
+  aspect-ratio: 9 / 16;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  background: #111;
+  position: relative;
+  margin-bottom: 0.45rem;
+}
+
+.asset-card-thumb img,
+.asset-card-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.asset-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.asset-card-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.asset-actions-panel {
+  position: sticky;
+  top: 1rem;
+}
+
+.asset-actions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.65rem 0;
+}
+
+.asset-actions-note {
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.assets-empty h3 {
+  margin: 0.25rem 0 0.5rem;
+}
+
 @media (max-width: 768px) {
   .app {
     flex-direction: column;
@@ -1724,5 +1927,13 @@ video {
   .create-actions .btn.primary {
     width: 100%;
     margin-left: 0;
+  }
+
+  .starting-point-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assets-layout {
+    grid-template-columns: 1fr;
   }
 }

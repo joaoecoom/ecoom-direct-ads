@@ -141,8 +141,14 @@ app.get("/api/projects", async (_req, res) => {
 });
 
 app.post("/api/projects", async (req, res) => {
-  const { name, masterPrompt, settings } = req.body || {};
-  const project = await createProject({ name, masterPrompt, settings });
+  const { name, masterPrompt, settings, startingPoint, entryPrompt } = req.body || {};
+  const project = await createProject({
+    name,
+    masterPrompt,
+    settings,
+    startingPoint,
+    entryPrompt,
+  });
   res.status(201).json(project);
 });
 
@@ -236,25 +242,35 @@ app.post("/api/projects/:id/assets", async (req, res) => {
   if (!data) return res.status(400).json({ error: "Campo 'data' (base64) obrigatório" });
 
   const buffer = Buffer.from(data, "base64");
-  if (buffer.length > 6 * 1024 * 1024) {
-    return res.status(400).json({ error: "Imagem demasiado grande (max 6MB)" });
+  const name = filename || "upload.png";
+  const isVideo =
+    role === "video" ||
+    mimeType?.startsWith("video/") ||
+    /\.(mp4|mov|webm|m4v)$/i.test(name);
+  const maxBytes = isVideo ? 80 * 1024 * 1024 : 6 * 1024 * 1024;
+  if (buffer.length > maxBytes) {
+    return res.status(400).json({
+      error: isVideo
+        ? "Vídeo demasiado grande (max 80MB)"
+        : "Imagem demasiado grande (max 6MB)",
+    });
   }
 
-  const ext = (filename || "upload.png").split(".").pop() || "png";
+  const ext = name.split(".").pop() || (isVideo ? "mp4" : "png");
   const isReference = role === "reference";
   const asset = await createAsset({
     projectId: req.params.id,
     sceneId: sceneId || null,
-    type: "image",
+    type: isVideo ? "video" : "image",
     source: isReference ? "reference" : "upload",
-    prompt: label || filename || (isReference ? "referência" : "upload"),
+    prompt: label || name || (isReference ? "referência" : "upload"),
     fileBuffer: buffer,
     ext,
     metadata: {
-      mimeType: mimeType || "image/png",
-      originalName: filename,
-      role: isReference ? "reference" : "scene",
-      label: label || filename || "",
+      mimeType: mimeType || (isVideo ? "video/mp4" : "image/png"),
+      originalName: name,
+      role: isReference ? "reference" : isVideo ? "video" : "scene",
+      label: label || name || "",
     },
   });
 

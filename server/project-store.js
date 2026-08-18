@@ -49,6 +49,8 @@ function normalizeProject(raw) {
 
   const base = {
     ...raw,
+    startingPoint: raw.startingPoint || "prompt",
+    entryPrompt: raw.entryPrompt || "",
     settings: { ...DEFAULT_PROJECT_SETTINGS, ...raw.settings },
     jobIds: raw.jobIds || [],
     creatives: creatives.map((c) => ({
@@ -69,6 +71,8 @@ function serializeProject(project) {
     id: project.id,
     name: project.name,
     masterPrompt: project.masterPrompt,
+    startingPoint: project.startingPoint || "prompt",
+    entryPrompt: project.entryPrompt || "",
     settings: project.settings,
     jobIds: project.jobIds,
     creatives: project.creatives,
@@ -361,6 +365,8 @@ export async function createProject(payload = {}) {
     id: randomUUID(),
     name: String(payload.name || "Untitled Project").trim() || "Untitled Project",
     masterPrompt: String(payload.masterPrompt || "").trim(),
+    startingPoint: payload.startingPoint || "prompt",
+    entryPrompt: String(payload.entryPrompt || "").trim(),
     settings: { ...DEFAULT_PROJECT_SETTINGS, ...payload.settings },
     jobIds: [],
     creatives: [],

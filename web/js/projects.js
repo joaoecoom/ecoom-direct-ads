@@ -139,12 +139,14 @@ export function getProject(id) {
   return cache.find((p) => p.id === id) ?? null;
 }
 
-export async function createProject(name, masterPrompt = "") {
+export async function createProject(name, masterPrompt = "", options = {}) {
   await ensureApiEnabled();
 
   const payload = {
     name: name.trim() || "Untitled Project",
     masterPrompt: masterPrompt.trim(),
+    startingPoint: options.startingPoint || "prompt",
+    entryPrompt: options.entryPrompt?.trim() || "",
   };
 
   if (apiEnabled) {
@@ -161,6 +163,10 @@ export async function createProject(name, masterPrompt = "") {
     settings: { ...DEFAULT_SETTINGS },
     jobIds: [],
     creatives: [],
+    activeCreativeId: null,
+    assetIds: [],
+    referenceAssetIds: [],
+    avatar: null,
     latestCreative: null,
     createdAt: now,
     updatedAt: now,

@@ -70,6 +70,10 @@
               <p id="project-subtitle" class="muted"></p>
             </div>
             <div class="project-header-actions">
+              <div class="project-create-menu">
+                <button type="button" class="btn primary sm" id="btn-project-create">+ Create</button>
+                <div id="project-create-dropdown" class="project-create-dropdown hidden"></div>
+              </div>
               <button type="button" class="btn ghost sm" id="btn-rename-project">Rename</button>
               <button type="button" class="btn ghost sm danger" id="btn-delete-project" title="Eliminar projecto">
                 Eliminar
@@ -103,6 +107,32 @@
             <div class="job-progress-track"><div id="ws-job-progress-bar" class="job-progress-bar"></div></div>
             <div id="ws-job-steps" class="job-steps"></div>
             <div id="ws-job-log" class="job-log"></div>
+          </div>
+
+          <div id="panel-assets" class="workspace-panel hidden">
+            <div class="images-toolbar card">
+              <div>
+                <h2>Project Assets</h2>
+                <p id="assets-status" class="muted">Imagens, vídeos, referências e personagens — reutilizáveis em todo o projecto.</p>
+              </div>
+              <div class="images-actions">
+                <label class="btn sm upload-label">
+                  + Imagem
+                  <input type="file" id="assets-upload-input" accept="image/*" multiple hidden />
+                </label>
+                <label class="btn sm upload-label">
+                  + Vídeo
+                  <input type="file" id="assets-upload-video-input" accept="video/*" hidden />
+                </label>
+              </div>
+            </div>
+            <div id="assets-notice" class="card pipeline-hint hidden"></div>
+            <div class="assets-layout">
+              <div id="assets-grid" class="assets-grid"></div>
+              <aside id="asset-actions-panel" class="asset-actions-panel card">
+                <p class="muted">Selecciona um asset para ver acções.</p>
+              </aside>
+            </div>
           </div>
 
           <div id="panel-create" class="workspace-panel create-workspace">
@@ -375,23 +405,39 @@
       </div>
     </div>
 
-    <!-- NEW PROJECT MODAL -->
+    <!-- NEW PROJECT — Creative Starting Point -->
     <div id="new-project-modal" class="modal hidden">
-      <div class="modal-card card">
-        <h2>New Project</h2>
-        <form id="new-project-form">
-          <label for="new-project-name">Nome</label>
-          <input type="text" id="new-project-name" required placeholder="Vitamina D UGC" />
-          <label for="new-project-prompt">Master Prompt (opcional)</label>
-          <textarea
-            id="new-project-prompt"
-            placeholder="Brief inicial do anúncio..."
-          ></textarea>
-          <div class="modal-actions">
+      <div class="modal-card card modal-wide">
+        <div id="new-project-step-pick" class="new-project-step">
+          <p class="eyebrow">Create a new project</p>
+          <h2>Como queres começar?</h2>
+          <p class="muted sp-intro">Escolhe o ponto de entrada — todos convergem para a mesma pipeline Ecoom.</p>
+          <div id="starting-point-grid" class="starting-point-grid"></div>
+          <div class="modal-actions sp-modal-actions">
             <button type="button" class="btn ghost" id="modal-cancel">Cancelar</button>
-            <button type="submit" class="btn primary">Criar projecto</button>
           </div>
-        </form>
+        </div>
+        <div id="new-project-step-details" class="new-project-step hidden">
+          <button type="button" class="btn ghost sm sp-back" id="sp-back">← Voltar</button>
+          <p class="eyebrow" id="sp-selected-label">Start from Prompt</p>
+          <h2 id="sp-details-title">Nome do projecto</h2>
+          <form id="new-project-form">
+            <label for="new-project-name">Nome</label>
+            <input type="text" id="new-project-name" required placeholder="Vitamina D UGC" />
+            <div id="sp-prompt-field">
+              <label for="new-project-prompt" id="sp-prompt-label">Master Prompt</label>
+              <textarea
+                id="new-project-prompt"
+                placeholder="Cria um anúncio UGC de 60 segundos para..."
+                rows="4"
+              ></textarea>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn ghost" id="modal-cancel-2">Cancelar</button>
+              <button type="submit" class="btn primary">Criar workspace</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
