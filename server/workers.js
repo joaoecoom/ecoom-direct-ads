@@ -27,7 +27,7 @@ import { shouldUseUgcFlow } from "../src/lib/ugc-flow.js";
 import { resolveSceneVideoPath } from "./timeline.js";
 import { syncGenerationAssetsToProject } from "./project-sync.js";
 import { generateAssetVariations } from "../src/lib/asset-variations.js";
-import { generateImage } from "../src/lib/imagen.js";
+import { generateImage, generateImageWithReferences } from "../src/lib/imagen.js";
 import { generateVideoFromImage, generateVideoFromText } from "../src/lib/veo-client.js";
 
 export function loadStoryboardForProject(project, creativeId = null) {
@@ -93,6 +93,44 @@ async function resolveProjectReferencePaths(project) {
     }
   }
   return paths;
+}
+
+async function resolveAttachedRefs(refs = []) {
+  const out = [];
+  for (const ref of refs) {
+    const assetId = typeof ref === "string" ? ref : ref?.assetId;
+    const role = typeof ref === "string" ? "other" : ref?.role || "other";
+    if (!assetId) continue;
+    const asset = await getAsset(assetId);
+    if (!asset || asset.type !== "image") continue;
+    try {
+      out.push({ assetId, role, path: resolveAssetFile(asset) });
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
+}
+
+function promptWithVisualRefs(prompt, refs = []) {
+  if (!refs.length) return String(prompt || "").trim();
+  const lines = [String(prompt || "").trim(), "", "VISUAL REFERENCES ATTACHED:"];
+  for (const ref of refs) {
+    if (ref.role === "face") {
+      lines.push(
+        "- FACE IDENTITY: use this exact face (age, skin texture, hair). Do not invent a different person.",
+      );
+    } else if (ref.role === "product") {
+      lines.push(
+        "- PRODUCT / PACKAGING: this item must appear naturally (held in hand, on table, or packshot).",
+      );
+    } else if (ref.role === "clothing") {
+      lines.push("- OUTFIT: the person wears this clothing.");
+    } else {
+      lines.push("- Extra visual element: incorporate this reference in the scene.");
+    }
+  }
+  return lines.join("\n");
 }
 
 async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order, creativeId }) {
@@ -658,7 +696,7 @@ async function runVariationsJob(job, onProgress) {
 }
 
 async function runStandaloneImageJob(job, onProgress) {
-  const { projectId, prompt, count } = job.request;
+  const { projectId, prompt, count, references } = job.request;
   if (!projectId || !String(prompt || "").trim()) {
     throw new Error("projectId e prompt obrigatórios");
   }
@@ -666,6 +704,8 @@ async function runStandaloneImageJob(job, onProgress) {
   const project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
 
+  const refs = await resolveAttachedRefs(references);
+  const finalPrompt = promptWithVisualRefs(prompt, refs);
   const adConfig = resolveAdConfig(project.settings || {});
   const n = Math.min(Math.max(1, Number(count) || 1), 12);
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `gen-${job.id}`);
@@ -675,35 +715,52 @@ async function runStandaloneImageJob(job, onProgress) {
   for (let i = 0; i < n; i++) {
     onProgress?.({
       step: "image",
-      message: `Nano Banana Pro — imagem ${i + 1}/${n}`,
+      message: refs.length
+        ? `Nano Banana Pro + ${refs.length} ref(s) — ${i + 1}/${n}`
+        : `Nano Banana Pro — imagem ${i + 1}/${n}`,
       sceneIndex: i + 1,
       sceneTotal: n,
     });
     const outputPath = path.join(outputDir, `image-${String(i + 1).padStart(2, "0")}.png`);
-    await generateImage({
-      prompt: String(prompt).trim(),
-      outputPath,
-      aspectRatio: adConfig.aspectRatio || "9:16",
-      ugc: true,
-    });
+    if (refs.length) {
+      await generateImageWithReferences({
+        prompt: finalPrompt,
+        referenceImagePaths: refs.map((r) => r.path),
+        outputPath,
+        aspectRatio: adConfig.aspectRatio || "9:16",
+        ugc: true,
+      });
+    } else {
+      await generateImage({
+        prompt: finalPrompt,
+        outputPath,
+        aspectRatio: adConfig.aspectRatio || "9:16",
+        ugc: true,
+      });
+    }
     const asset = await createAsset({
       projectId,
       type: "image",
       source: "generated",
-      prompt: String(prompt).trim(),
+      prompt: finalPrompt,
       sourcePath: outputPath,
       ext: "png",
-      metadata: { jobId: job.id, order: i + 1, role: "studio" },
+      metadata: {
+        jobId: job.id,
+        order: i + 1,
+        role: "studio",
+        referenceAssetIds: refs.map((r) => r.assetId),
+      },
     });
     assetIds.push(asset.id);
     await addProjectAssetId(projectId, asset.id);
   }
 
-  return { assetIds, count: assetIds.length };
+  return { assetIds, count: assetIds.length, referenceCount: refs.length };
 }
 
 async function runStandaloneVideoJob(job, onProgress) {
-  const { projectId, prompt } = job.request;
+  const { projectId, prompt, references } = job.request;
   if (!projectId || !String(prompt || "").trim()) {
     throw new Error("projectId e prompt obrigatórios");
   }
@@ -711,37 +768,69 @@ async function runStandaloneVideoJob(job, onProgress) {
   const project = await getProject(projectId);
   if (!project) throw new Error("Projecto não encontrado");
 
+  const refs = await resolveAttachedRefs(references);
+  const finalPrompt = promptWithVisualRefs(prompt, refs);
   const adConfig = resolveAdConfig(project.settings || {});
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `veo-${job.id}`);
   fs.mkdirSync(outputDir, { recursive: true });
   const outputFileName = path.join(outputDir, "clip.mp4");
 
-  onProgress?.({ step: "video", message: "Veo — a gerar vídeo a partir do prompt…" });
-
-  const clip = await generateVideoFromText({
-    prompt: String(prompt).trim(),
-    aspectRatio: adConfig.aspectRatio || "9:16",
-    durationSeconds: adConfig.clipDurationSeconds || 8,
-    resolution: adConfig.resolution,
-    outputFileName,
-    runLabel: `studio-video/${job.id}`,
-  });
+  let clip;
+  if (refs.length) {
+    onProgress?.({
+      step: "image",
+      message: `A compor frame com ${refs.length} referência(s)…`,
+    });
+    const composedPath = path.join(outputDir, "composed.png");
+    await generateImageWithReferences({
+      prompt: finalPrompt,
+      referenceImagePaths: refs.map((r) => r.path),
+      outputPath: composedPath,
+      aspectRatio: adConfig.aspectRatio || "9:16",
+      ugc: true,
+    });
+    onProgress?.({ step: "video", message: "Veo — a animar o frame composto…" });
+    clip = await generateVideoFromImage({
+      imagePath: composedPath,
+      prompt: finalPrompt,
+      aspectRatio: adConfig.aspectRatio || "9:16",
+      durationSeconds: adConfig.clipDurationSeconds || 8,
+      resolution: adConfig.resolution,
+      outputFileName,
+      runLabel: `studio-video-refs/${job.id}`,
+    });
+  } else {
+    onProgress?.({ step: "video", message: "Veo — a gerar vídeo a partir do prompt…" });
+    clip = await generateVideoFromText({
+      prompt: finalPrompt,
+      aspectRatio: adConfig.aspectRatio || "9:16",
+      durationSeconds: adConfig.clipDurationSeconds || 8,
+      resolution: adConfig.resolution,
+      outputFileName,
+      runLabel: `studio-video/${job.id}`,
+    });
+  }
 
   const asset = await createAsset({
     projectId,
     type: "video",
     source: "generated",
-    prompt: String(prompt).trim(),
+    prompt: finalPrompt,
     sourcePath: clip.localPath,
     ext: "mp4",
-    metadata: { jobId: job.id, role: "studio", type: "text-to-video" },
+    metadata: {
+      jobId: job.id,
+      role: "studio",
+      type: refs.length ? "refs-to-video" : "text-to-video",
+      referenceAssetIds: refs.map((r) => r.assetId),
+    },
   });
   await addProjectAssetId(projectId, asset.id);
-  return { assetId: asset.id, videoAssetIds: [asset.id] };
+  return { assetId: asset.id, videoAssetIds: [asset.id], referenceCount: refs.length };
 }
 
 async function runAssetVideoJob(job, onProgress) {
-  const { projectId, sourceAssetId, lastFrameAssetId, prompt } = job.request;
+  const { projectId, sourceAssetId, lastFrameAssetId, prompt, references } = job.request;
   if (!projectId || !sourceAssetId) {
     throw new Error("projectId e sourceAssetId obrigatórios");
   }
@@ -753,6 +842,20 @@ async function runAssetVideoJob(job, onProgress) {
   if (!source || source.type !== "image") {
     throw new Error("Selecciona uma imagem para animar");
   }
+
+  const extraRefs = (await resolveAttachedRefs(references)).filter(
+    (r) => r.assetId !== sourceAssetId,
+  );
+  const allRefs = [
+    { assetId: sourceAssetId, role: "face", path: resolveAssetFile(source) },
+    ...extraRefs,
+  ];
+  const motion = promptWithVisualRefs(
+    String(prompt || "").trim() ||
+      source.prompt ||
+      "Natural handheld camera, authentic UGC, person moving naturally, preserve identity.",
+    extraRefs,
+  );
 
   let lastFramePath;
   if (lastFrameAssetId) {
@@ -767,16 +870,31 @@ async function runAssetVideoJob(job, onProgress) {
   }
 
   const adConfig = resolveAdConfig(project.settings || {});
-  const imagePath = resolveAssetFile(source);
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `animate-${job.id}`);
   fs.mkdirSync(outputDir, { recursive: true });
   const outputFileName = path.join(outputDir, "clip.mp4");
-  const motion =
-    String(prompt || "").trim() ||
-    source.prompt ||
-    "Natural handheld camera, authentic UGC, person moving naturally, preserve identity.";
 
-  onProgress?.({ step: "video", message: lastFramePath ? "Veo — interpolar Inicial → Final…" : "Veo — a animar imagem…" });
+  let imagePath = resolveAssetFile(source);
+  if (extraRefs.length) {
+    onProgress?.({
+      step: "image",
+      message: `A aplicar ${extraRefs.length} referência(s) no frame…`,
+    });
+    const composedPath = path.join(outputDir, "composed.png");
+    await generateImageWithReferences({
+      prompt: motion,
+      referenceImagePaths: allRefs.map((r) => r.path),
+      outputPath: composedPath,
+      aspectRatio: adConfig.aspectRatio || "9:16",
+      ugc: true,
+    });
+    imagePath = composedPath;
+  }
+
+  onProgress?.({
+    step: "video",
+    message: lastFramePath ? "Veo — interpolar Inicial → Final…" : "Veo — a animar imagem…",
+  });
 
   const clip = await generateVideoFromImage({
     imagePath,
@@ -799,8 +917,9 @@ async function runAssetVideoJob(job, onProgress) {
     metadata: {
       jobId: job.id,
       role: "studio",
-      type: "image-to-video",
+      type: extraRefs.length ? "image-refs-to-video" : "image-to-video",
       sourceAssetId,
+      referenceAssetIds: extraRefs.map((r) => r.assetId),
     },
   });
   await addProjectAssetId(projectId, asset.id);

@@ -1,4 +1,4 @@
-import { addProjectReference, animateAsset, fetchProjectAssets, setProjectAvatar } from "./api.js";
+import { addProjectReference, animateAsset, assetFileUrl, fetchProjectAssets, setProjectAvatar } from "./api.js";
 import {
   generateStudioImages,
   generateStudioVideo,
@@ -19,6 +19,8 @@ const state = {
   frameSlot: "inicial",
   inicialAssetId: null,
   finalAssetId: null,
+  refs: [],
+  pendingRefRole: "other",
 };
 
 export function initCanvas(projectId) {
@@ -67,6 +69,42 @@ function bindCanvasEvents() {
     e.preventDefault();
     void onComposerSubmit();
   });
+
+  document.getElementById("canvas-attach-btn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.getElementById("canvas-ref-menu")?.classList.toggle("hidden");
+  });
+
+  document.getElementById("canvas-ref-menu")?.addEventListener("click", (e) => {
+    const roleBtn = e.target.closest("[data-ref-role]");
+    if (!roleBtn) return;
+    state.pendingRefRole = roleBtn.dataset.refRole;
+    const selected = state.cachedAssets.find((a) => a.id === state.selectedAssetId);
+    if (selected?.type === "image") {
+      addRef(selected.id, state.pendingRefRole);
+      document.getElementById("canvas-ref-menu")?.classList.add("hidden");
+      setCanvasStatus(`${roleLabel(state.pendingRefRole)} ligada — ou faz upload de outra.`);
+      return;
+    }
+    document.getElementById("canvas-ref-upload")?.click();
+  });
+
+  document.getElementById("canvas-ref-upload")?.addEventListener("change", onRefUpload);
+
+  document.getElementById("canvas-refs")?.addEventListener("click", (e) => {
+    const remove = e.target.closest("[data-remove-ref]");
+    if (remove) {
+      state.refs = state.refs.filter((r) => r.assetId !== remove.dataset.removeRef);
+      renderRefChips();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    const menu = document.getElementById("canvas-ref-menu");
+    if (!menu || menu.classList.contains("hidden")) return;
+    if (e.target.closest(".canvas-attach-wrap")) return;
+    menu.classList.add("hidden");
+  });
 }
 
 function canvasCallbacks() {
@@ -82,6 +120,66 @@ function canvasCallbacks() {
 function setCanvasStatus(msg) {
   const el = document.getElementById("canvas-status");
   if (el) el.textContent = msg || "";
+}
+
+function roleLabel(role) {
+  return (
+    {
+      face: "Cara",
+      product: "Embalagem",
+      clothing: "Roupa",
+      other: "Ref",
+    }[role] || "Ref"
+  );
+}
+
+function addRef(assetId, role) {
+  if (!assetId) return;
+  state.refs = state.refs.filter((r) => r.assetId !== assetId);
+  state.refs.push({ assetId, role: role || "other" });
+  renderRefChips();
+}
+
+function renderRefChips() {
+  const el = document.getElementById("canvas-refs");
+  if (!el) return;
+  if (!state.refs.length) {
+    el.innerHTML = "";
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = state.refs
+    .map((r) => {
+      const asset = state.cachedAssets.find((a) => a.id === r.assetId);
+      const src = asset ? `${assetFileUrl(asset.id)}?t=1` : "";
+      return `
+        <span class="canvas-ref-chip" title="${roleLabel(r.role)}">
+          ${src ? `<img src="${src}" alt="" />` : ""}
+          <em>${roleLabel(r.role)}</em>
+          <button type="button" data-remove-ref="${r.assetId}" aria-label="Remover">×</button>
+        </span>`;
+    })
+    .join("");
+}
+
+async function onRefUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file || !activeProjectId) return;
+  setCanvasStatus("A adicionar referência…");
+  try {
+    await uploadFilesToProject(activeProjectId, [file], { asReference: true });
+    await initProjects();
+    await renderCanvas(activeProjectId);
+    const latestImage = state.cachedAssets.find((a) => a.type === "image");
+    if (latestImage) addRef(latestImage.id, state.pendingRefRole);
+    document.getElementById("canvas-ref-menu")?.classList.add("hidden");
+    setCanvasStatus(`${roleLabel(state.pendingRefRole)} adicionada ao prompt.`);
+  } catch (err) {
+    setCanvasStatus(err.message);
+  } finally {
+    e.target.value = "";
+  }
 }
 
 function onSelectAsset(assetId) {
@@ -126,7 +224,11 @@ function syncComposerUi() {
     } else {
       modeLabel.textContent = "Imagem · Nano Banana Pro";
     }
+    if (state.refs.length) {
+      modeLabel.textContent += ` · ${state.refs.length} ref(s)`;
+    }
   }
+  renderRefChips();
 }
 
 async function onCanvasUpload(e) {
@@ -207,7 +309,11 @@ async function onComposerSubmit() {
       document.getElementById("canvas-prompt")?.focus();
       return;
     }
-    await generateStudioImages(activeProjectId, { prompt, count }, canvasCallbacks());
+    await generateStudioImages(
+      activeProjectId,
+      { prompt, count, references: state.refs },
+      canvasCallbacks(),
+    );
     return;
   }
 
@@ -218,6 +324,7 @@ async function onComposerSubmit() {
         const data = await animateAsset(activeProjectId, selected.id, {
           prompt,
           lastFrameAssetId: state.finalAssetId || undefined,
+          references: state.refs,
         });
         await waitForJob(data.jobId, {
           jobType: "asset_video",
@@ -242,7 +349,11 @@ async function onComposerSubmit() {
       selected?.type === "video"
         ? `${prompt}\n\nVariation of existing UGC clip. Preserve identity, setting and product if visible. ${selected.prompt || ""}`.trim()
         : prompt;
-    await generateStudioVideo(activeProjectId, { prompt: videoPrompt }, canvasCallbacks());
+    await generateStudioVideo(
+      activeProjectId,
+      { prompt: videoPrompt, references: state.refs },
+      canvasCallbacks(),
+    );
     return;
   }
 
@@ -280,16 +391,27 @@ async function startAdFromCanvas(prompt, selected) {
       : selected?.type === "image"
         ? "Usar a imagem seleccionada como personagem / produto no anúncio."
         : "Gerar anúncio só a partir deste prompt.",
+    state.refs.length
+      ? `\nReferências visuais: ${state.refs.map((r) => roleLabel(r.role)).join(", ")} (cara, embalagem, roupa).`
+      : "",
   ].join("\n");
 
   try {
     await updateProject(activeProjectId, { masterPrompt: brief, startingPoint: "prompt" });
-    if (selected?.type === "image") {
+    const face = state.refs.find((r) => r.role === "face");
+    const characterId = face?.assetId || (selected?.type === "image" ? selected.id : null);
+    if (characterId) {
       await setProjectAvatar(activeProjectId, {
-        assetId: selected.id,
+        assetId: characterId,
         characterBrief: prompt.slice(0, 180),
       });
-      await addProjectReference(activeProjectId, selected.id);
+    }
+    const refIds = [
+      ...state.refs.map((r) => r.assetId),
+      selected?.type === "image" ? selected.id : null,
+    ].filter(Boolean);
+    for (const id of [...new Set(refIds)]) {
+      await addProjectReference(activeProjectId, id);
     }
     await initProjects();
     window.dispatchEvent(
@@ -306,4 +428,5 @@ async function startAdFromCanvas(prompt, selected) {
 
 export function destroyCanvas() {
   state.selectedAssetId = null;
+  state.refs = [];
 }

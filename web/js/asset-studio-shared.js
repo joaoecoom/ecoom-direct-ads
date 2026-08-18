@@ -315,11 +315,11 @@ export async function handleAssetAction(action, ctx) {
   }
 }
 
-export async function generateStudioImages(projectId, { prompt, count }, callbacks = {}) {
+export async function generateStudioImages(projectId, { prompt, count, references }, callbacks = {}) {
   const { onStatus, onError, onComplete } = callbacks;
   onStatus?.(`Nano Banana Pro — a gerar ${count > 1 ? count + " imagens" : "imagem"}…`);
   try {
-    const data = await generateStandaloneImage(projectId, { prompt, count });
+    const data = await generateStandaloneImage(projectId, { prompt, count, references });
     await waitForJob(data.jobId, {
       jobType: "standalone_image",
       onUpdate: (job) => {
@@ -338,11 +338,11 @@ export async function generateStudioImages(projectId, { prompt, count }, callbac
   }
 }
 
-export async function generateStudioVideo(projectId, { prompt }, callbacks = {}) {
+export async function generateStudioVideo(projectId, { prompt, references }, callbacks = {}) {
   const { onStatus, onError, onComplete } = callbacks;
   onStatus?.("Veo — a gerar vídeo…");
   try {
-    const data = await generateStandaloneVideo(projectId, { prompt });
+    const data = await generateStandaloneVideo(projectId, { prompt, references });
     await waitForJob(data.jobId, {
       jobType: "standalone_video",
       onUpdate: (job) => onStatus?.(job.progress?.message || job.status),

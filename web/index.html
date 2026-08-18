@@ -147,12 +147,29 @@
                 <span class="canvas-frame-arrow">↔</span>
                 <button type="button" class="canvas-frame-btn" data-canvas-frame="final">Final</button>
               </div>
-              <input
-                type="text"
-                id="canvas-prompt"
-                placeholder="O que queres criar?"
-                autocomplete="off"
-              />
+              <div id="canvas-refs" class="canvas-refs"></div>
+              <div class="canvas-prompt-row">
+                <div class="canvas-attach-wrap">
+                  <button type="button" class="canvas-attach-btn" id="canvas-attach-btn" title="Adicionar cara, embalagem, roupa…">+</button>
+                  <div id="canvas-ref-menu" class="canvas-ref-menu hidden">
+                    <p class="muted">Adicionar referência</p>
+                    <button type="button" data-ref-role="face">Cara / identidade</button>
+                    <button type="button" data-ref-role="product">Embalagem / produto</button>
+                    <button type="button" data-ref-role="clothing">Roupa</button>
+                    <button type="button" data-ref-role="other">Outro</button>
+                    <label class="canvas-ref-upload">
+                      Upload imagem
+                      <input type="file" id="canvas-ref-upload" accept="image/*" hidden />
+                    </label>
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  id="canvas-prompt"
+                  placeholder="O que queres criar?"
+                  autocomplete="off"
+                />
+              </div>
               <div class="canvas-composer-row">
                 <span id="canvas-mode-label" class="muted">Vídeo · a partir de prompt</span>
                 <span id="canvas-count-wrap" class="hidden">

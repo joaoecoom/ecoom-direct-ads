@@ -12,8 +12,8 @@ const PIPELINE_BY_TYPE = {
   rebuild: ["queued", "rebuild", "done"],
   variations: ["queued", "image", "done"],
   standalone_image: ["queued", "image", "done"],
-  standalone_video: ["queued", "video", "done"],
-  asset_video: ["queued", "video", "done"],
+  standalone_video: ["queued", "image", "video", "done"],
+  asset_video: ["queued", "image", "video", "done"],
 };
 
 const STEP_LABELS = {

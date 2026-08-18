@@ -2245,6 +2245,96 @@ video {
   font-size: 0.85rem;
 }
 
+.canvas-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+
+.canvas-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.4rem 0.15rem 0.15rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.72rem;
+}
+
+.canvas-ref-chip img {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: cover;
+  border-radius: 999px;
+}
+
+.canvas-ref-chip em {
+  font-style: normal;
+}
+
+.canvas-ref-chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
+
+.canvas-prompt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.canvas-attach-wrap {
+  position: relative;
+}
+
+.canvas-attach-btn {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.canvas-ref-menu {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 0;
+  z-index: 12;
+  min-width: 200px;
+  padding: 0.55rem;
+  border-radius: 0.75rem;
+  background: #222;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.canvas-ref-menu button,
+.canvas-ref-upload {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.canvas-ref-menu button:hover,
+.canvas-ref-upload:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 #canvas-prompt {
   width: 100%;
   background: transparent;

@@ -338,12 +338,13 @@ app.post("/api/projects/:id/assets/generate-image", async (req, res) => {
   const prompt = String(req.body?.prompt || "").trim();
   if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
   const count = Math.min(Math.max(1, Number(req.body?.count) || 1), 12);
+  const references = Array.isArray(req.body?.references) ? req.body.references : [];
   const id = randomUUID().slice(0, 8);
 
   await createJob({
     id,
     type: "standalone_image",
-    request: { type: "standalone_image", projectId: req.params.id, prompt, count },
+    request: { type: "standalone_image", projectId: req.params.id, prompt, count, references },
   });
   enqueue(id);
   res.status(202).json({ jobId: id, status: "queued", type: "standalone_image", count });
@@ -355,12 +356,13 @@ app.post("/api/projects/:id/assets/generate-video", async (req, res) => {
 
   const prompt = String(req.body?.prompt || "").trim();
   if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
+  const references = Array.isArray(req.body?.references) ? req.body.references : [];
   const id = randomUUID().slice(0, 8);
 
   await createJob({
     id,
     type: "standalone_video",
-    request: { type: "standalone_video", projectId: req.params.id, prompt },
+    request: { type: "standalone_video", projectId: req.params.id, prompt, references },
   });
   enqueue(id);
   res.status(202).json({ jobId: id, status: "queued", type: "standalone_video" });
@@ -380,6 +382,7 @@ app.post("/api/projects/:id/assets/:assetId/animate", async (req, res) => {
 
   const prompt = String(req.body?.prompt || "").trim();
   const lastFrameAssetId = String(req.body?.lastFrameAssetId || "").trim() || null;
+  const references = Array.isArray(req.body?.references) ? req.body.references : [];
   const id = randomUUID().slice(0, 8);
 
   await createJob({
@@ -390,6 +393,7 @@ app.post("/api/projects/:id/assets/:assetId/animate", async (req, res) => {
       projectId: req.params.id,
       sourceAssetId: req.params.assetId,
       lastFrameAssetId,
+      references,
       prompt,
     },
   });
