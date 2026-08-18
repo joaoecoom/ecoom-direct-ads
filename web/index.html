@@ -112,6 +112,61 @@
             <div id="ws-job-log" class="job-log"></div>
           </div>
 
+          <div id="panel-canvas" class="workspace-panel canvas-panel">
+            <div class="canvas-topbar">
+              <div class="canvas-search-wrap">
+                <span class="canvas-search-icon">⌕</span>
+                <input type="search" id="canvas-search" placeholder="Procurar no projecto" />
+              </div>
+              <div class="canvas-top-actions">
+                <input type="file" id="canvas-upload-input" accept="image/*,video/*" multiple hidden />
+                <button type="button" class="canvas-icon-btn" id="canvas-add-btn" title="Adicionar ficheiros">+</button>
+              </div>
+            </div>
+            <div id="canvas-dropzone" class="assets-dropzone card hidden">
+              <div class="assets-dropzone-inner">
+                <strong>Solta imagens ou vídeos</strong>
+                <p class="muted">Entram no projecto. Depois geras, animas ou fazes um ad.</p>
+              </div>
+            </div>
+            <div id="canvas-empty" class="canvas-empty">
+              <div class="canvas-empty-icon" aria-hidden="true">✿</div>
+              <p>Comece a criar ou adicione arquivos</p>
+              <p class="muted">Arrasta imagens e vídeos para aqui.</p>
+            </div>
+            <div id="canvas-grid" class="assets-grid canvas-grid hidden"></div>
+            <p id="canvas-status" class="canvas-status muted"></p>
+            <form id="canvas-composer" class="canvas-composer">
+              <div class="canvas-composer-modes">
+                <button type="button" class="canvas-mode" data-canvas-mode="image">Imagem</button>
+                <button type="button" class="canvas-mode active" data-canvas-mode="video">Vídeo</button>
+                <button type="button" class="canvas-mode" data-canvas-mode="ads">Ads</button>
+              </div>
+              <div class="canvas-frames">
+                <button type="button" class="canvas-frame-btn active" data-canvas-frame="inicial">Inicial</button>
+                <span class="canvas-frame-arrow">↔</span>
+                <button type="button" class="canvas-frame-btn" data-canvas-frame="final">Final</button>
+              </div>
+              <input
+                type="text"
+                id="canvas-prompt"
+                placeholder="O que queres criar?"
+                autocomplete="off"
+              />
+              <div class="canvas-composer-row">
+                <span id="canvas-mode-label" class="muted">Vídeo · a partir de prompt</span>
+                <span id="canvas-count-wrap" class="hidden">
+                  <select id="canvas-count" aria-label="Quantidade">
+                    <option value="1">x1</option>
+                    <option value="2">x2</option>
+                    <option value="4">x4</option>
+                  </select>
+                </span>
+                <button type="submit" class="canvas-send" title="Gerar">→</button>
+              </div>
+            </form>
+          </div>
+
           <div id="panel-assets" class="workspace-panel hidden">
             <div class="images-toolbar card">
               <div>
@@ -549,7 +604,7 @@
     <!-- NEW PROJECT — Creative Starting Point -->
     <div id="new-project-modal" class="modal hidden">
       <div class="modal-card card modal-wide">
-        <div id="new-project-step-pick" class="new-project-step">
+        <div id="new-project-step-pick" class="new-project-step hidden">
           <p class="eyebrow">Create a new project</p>
           <h2>Como queres começar?</h2>
           <p class="muted sp-intro">Studio primeiro: upload, gerar imagem ou vídeo. O anúncio é uma opção — não o único caminho.</p>
@@ -558,14 +613,14 @@
             <button type="button" class="btn ghost" id="modal-cancel">Cancelar</button>
           </div>
         </div>
-        <div id="new-project-step-details" class="new-project-step hidden">
-          <button type="button" class="btn ghost sm sp-back" id="sp-back">← Voltar</button>
-          <p class="eyebrow" id="sp-selected-label">Start from Prompt</p>
-          <h2 id="sp-details-title">Nome do projecto</h2>
+        <div id="new-project-step-details" class="new-project-step">
+          <p class="eyebrow">Novo projecto</p>
+          <h2 id="sp-details-title">Comece a criar</h2>
+          <p class="muted">Abre um canvas vazio — arrasta ficheiros ou escreve o que queres criar.</p>
           <form id="new-project-form">
             <label for="new-project-name">Nome</label>
-            <input type="text" id="new-project-name" required placeholder="Vitamina D UGC" />
-            <div id="sp-prompt-field">
+            <input type="text" id="new-project-name" placeholder="Sem título" />
+            <div id="sp-prompt-field" class="hidden">
               <label for="new-project-prompt" id="sp-prompt-label">Master Prompt</label>
               <textarea
                 id="new-project-prompt"
@@ -575,7 +630,7 @@
             </div>
             <div class="modal-actions">
               <button type="button" class="btn ghost" id="modal-cancel-2">Cancelar</button>
-              <button type="submit" class="btn primary">Criar workspace</button>
+              <button type="submit" class="btn primary">Abrir studio</button>
             </div>
           </form>
         </div>

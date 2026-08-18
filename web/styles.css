@@ -2125,3 +2125,164 @@ video {
     position: static;
   }
 }
+
+.canvas-panel {
+  position: relative;
+  min-height: calc(100vh - 220px);
+  padding-bottom: 8.5rem;
+}
+
+.canvas-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.canvas-search-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+}
+
+.canvas-search-wrap input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.canvas-icon-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.canvas-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 42vh;
+  text-align: center;
+  gap: 0.35rem;
+}
+
+.canvas-empty-icon {
+  font-size: 3.2rem;
+  opacity: 0.9;
+  margin-bottom: 0.5rem;
+}
+
+.canvas-empty p {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.canvas-grid {
+  padding-bottom: 1rem;
+}
+
+.canvas-status {
+  min-height: 1.25rem;
+  margin: 0.5rem 0 0;
+}
+
+.canvas-composer {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 8;
+  margin: 1.5rem auto 0;
+  max-width: 720px;
+  padding: 0.85rem 1rem 0.75rem;
+  border-radius: 1.25rem;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.canvas-composer-modes,
+.canvas-frames {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+
+.canvas-mode,
+.canvas-frame-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.canvas-mode.active,
+.canvas-frame-btn.active {
+  background: #fff;
+  color: #111;
+}
+
+.canvas-frame-arrow {
+  opacity: 0.5;
+  font-size: 0.85rem;
+}
+
+#canvas-prompt {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 1.05rem;
+  padding: 0.35rem 0.2rem 0.7rem;
+  outline: none;
+}
+
+.canvas-composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.canvas-composer-row .muted {
+  flex: 1;
+  font-size: 0.8rem;
+}
+
+.canvas-send {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 999px;
+  border: 0;
+  background: #fff;
+  color: #111;
+  font-size: 1.1rem;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.asset-card.frame-inicial {
+  outline: 2px solid #60a5fa;
+}
+
+.asset-card.frame-final {
+  outline: 2px solid #34d399;
+}

@@ -741,7 +741,7 @@ async function runStandaloneVideoJob(job, onProgress) {
 }
 
 async function runAssetVideoJob(job, onProgress) {
-  const { projectId, sourceAssetId, prompt } = job.request;
+  const { projectId, sourceAssetId, lastFrameAssetId, prompt } = job.request;
   if (!projectId || !sourceAssetId) {
     throw new Error("projectId e sourceAssetId obrigatórios");
   }
@@ -754,6 +754,18 @@ async function runAssetVideoJob(job, onProgress) {
     throw new Error("Selecciona uma imagem para animar");
   }
 
+  let lastFramePath;
+  if (lastFrameAssetId) {
+    const last = await getAsset(lastFrameAssetId);
+    if (last?.type === "image") {
+      try {
+        lastFramePath = resolveAssetFile(last);
+      } catch {
+        lastFramePath = undefined;
+      }
+    }
+  }
+
   const adConfig = resolveAdConfig(project.settings || {});
   const imagePath = resolveAssetFile(source);
   const outputDir = path.join(PROJECT_ROOT, "assets", `project-${projectId}`, `animate-${job.id}`);
@@ -764,10 +776,11 @@ async function runAssetVideoJob(job, onProgress) {
     source.prompt ||
     "Natural handheld camera, authentic UGC, person moving naturally, preserve identity.";
 
-  onProgress?.({ step: "video", message: "Veo — a animar imagem…" });
+  onProgress?.({ step: "video", message: lastFramePath ? "Veo — interpolar Inicial → Final…" : "Veo — a animar imagem…" });
 
   const clip = await generateVideoFromImage({
     imagePath,
+    lastFramePath,
     prompt: motion,
     aspectRatio: adConfig.aspectRatio || "9:16",
     durationSeconds: adConfig.clipDurationSeconds || 8,

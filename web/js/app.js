@@ -9,6 +9,7 @@ import {
   updateProject,
 } from "./projects.js";
 import { destroyCreateAd, initCreateAd, refreshCreateAdForm } from "./create-ad.js";
+import { destroyCanvas, initCanvas, renderCanvas } from "./canvas.js";
 import { destroyImagesTab, initImagesTab, renderImagesPanel } from "./images.js";
 import { destroyVideosTab, initVideosTab, renderVideosPanel } from "./videos.js";
 import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./timeline.js";
@@ -47,6 +48,8 @@ const apiStatusEl = document.getElementById("api-status");
 
 let selectedStartingPoint = "upload";
 let forceEntryTab = null;
+let canvasTabInitialized = false;
+let canvasTabProjectId = null;
 let assetsTabInitialized = false;
 let assetsTabProjectId = null;
 
@@ -60,7 +63,7 @@ let timelineTabInitialized = false;
 let timelineTabProjectId = null;
 let exportTabInitialized = false;
 let exportTabProjectId = null;
-let activeWorkspaceTab = "images";
+let activeWorkspaceTab = "canvas";
 const entryRoutedProjects = new Set();
 
 function parseRoute() {
@@ -208,11 +211,14 @@ function renderProjectWorkspace(id) {
 
   document.getElementById("project-title").textContent = project.name;
   document.getElementById("project-subtitle").textContent =
-    project.masterPrompt?.slice(0, 120) ||
-    (project.startingPoint && project.startingPoint !== "prompt"
-      ? `Studio · ${getStartingPoint(project.startingPoint).titlePt}`
-      : "Upload, gera imagens (Nano Banana) ou vídeos (Veo) — o anúncio é opcional.");
+    project.assetIds?.length
+      ? `${project.assetIds.length} asset(s) no studio`
+      : "Arrasta ficheiros ou descreve o que queres criar.";
 
+  if (canvasTabProjectId !== id) {
+    canvasTabInitialized = false;
+    canvasTabProjectId = id;
+  }
   if (imagesTabProjectId !== id) {
     imagesTabInitialized = false;
     imagesTabProjectId = id;
@@ -244,30 +250,14 @@ function renderProjectWorkspace(id) {
   renderProjectTabs(id);
   initCreativesRail(id);
 
-  const route = getEntryRoute(project.startingPoint || "upload");
   if (!entryRoutedProjects.has(id)) {
     entryRoutedProjects.add(id);
-    if (forceEntryTab) {
-      activeWorkspaceTab = forceEntryTab;
-      forceEntryTab = null;
-    } else {
-      activeWorkspaceTab = route.tab === "create" ? "images" : route.tab;
-    }
-    if (route.action) {
-      queueMicrotask(() => {
-        window.dispatchEvent(
-          new CustomEvent("ecoom:starting-point", {
-            detail: {
-              projectId: id,
-              startingPoint: project.startingPoint || "upload",
-              action: route.action,
-              tab: activeWorkspaceTab,
-            },
-          }),
-        );
-      });
-    }
+    activeWorkspaceTab = forceEntryTab === "create" ? "create" : "canvas";
+    forceEntryTab = null;
   }
+
+  const rail = document.getElementById("project-videos-rail");
+  rail?.classList.toggle("hidden", activeWorkspaceTab === "canvas");
 
   switchWorkspaceTab(activeWorkspaceTab);
   void renderBlueprint(id);
@@ -282,6 +272,20 @@ function switchWorkspaceTab(tab) {
   document.querySelectorAll("#workspace-tabs .tab[data-tab]").forEach((el) => {
     el.classList.toggle("active", el.dataset.tab === tab);
   });
+
+  document.getElementById("project-videos-rail")?.classList.toggle(
+    "hidden",
+    tab === "canvas",
+  );
+
+  if (tab === "canvas" && currentProjectId) {
+    if (!canvasTabInitialized) {
+      initCanvas(currentProjectId);
+      canvasTabInitialized = true;
+    } else {
+      void renderCanvas(currentProjectId);
+    }
+  }
 
   if (tab === "assets" && currentProjectId) {
     if (!assetsTabInitialized) {
@@ -429,9 +433,9 @@ function renderProjectTabs(id) {
   const exportReady = project?.latestExport?.assetId ? 1 : 0;
 
   tabsEl.innerHTML = `
+    <button type="button" class="tab" data-tab="canvas">Studio</button>
     <button type="button" class="tab" data-tab="images">Images</button>
     <button type="button" class="tab" data-tab="videos">Videos</button>
-    <button type="button" class="tab" data-tab="assets">Assets</button>
     <button type="button" class="tab" data-tab="create">Ads</button>
     <button type="button" class="tab" data-tab="timeline">Timeline</button>
     <button type="button" class="tab" data-tab="export">Export${exportReady ? " ✓" : ""}</button>
@@ -515,9 +519,10 @@ async function handleInProjectStartingPoint(startingPoint) {
 
 function openNewProjectModal() {
   selectedStartingPoint = "upload";
-  renderStartingPointPicker();
-  spStepPick?.classList.remove("hidden");
-  spStepDetails?.classList.add("hidden");
+  spStepPick?.classList.add("hidden");
+  spStepDetails?.classList.remove("hidden");
+  document.getElementById("sp-prompt-field")?.classList.add("hidden");
+  newProjectName?.focus();
   modal?.classList.remove("hidden");
 }
 
@@ -608,25 +613,13 @@ modal?.addEventListener("click", (e) => {
 
 newProjectForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const promptText = newProjectPrompt?.value?.trim() || "";
-  const isPromptMode = selectedStartingPoint === "prompt";
-  const project = await createProject(newProjectName.value, isPromptMode ? promptText : "", {
-    startingPoint: selectedStartingPoint,
-    entryPrompt: isPromptMode ? "" : promptText,
+  const project = await createProject(newProjectName.value || "Novo projecto", "", {
+    startingPoint: "upload",
   });
 
-  if (isApiEnabled() && selectedStartingPoint !== "prompt") {
-    try {
-      await createCreative(project.id, { title: "Creative 1" });
-      await initProjects();
-    } catch {
-      /* creative optional on first load */
-    }
-  }
-
   closeNewProjectModal();
-  forceEntryTab = getEntryRoute(selectedStartingPoint).tab;
-  activeWorkspaceTab = forceEntryTab;
+  forceEntryTab = "canvas";
+  activeWorkspaceTab = "canvas";
   navigate("project", project.id);
 });
 
@@ -734,6 +727,13 @@ window.addEventListener("ecoom:project-synced", (e) => {
 window.addEventListener("ecoom:switch-tab", (e) => {
   const tab = e.detail?.tab;
   if (tab && currentProjectId) switchWorkspaceTab(tab);
+});
+
+window.addEventListener("ecoom:seed-ad", async (e) => {
+  const id = e.detail?.projectId;
+  if (!id) return;
+  await initProjects();
+  if (currentProjectId === id) refreshCreateAdForm(id);
 });
 
 window.addEventListener("ecoom:export-ready", async (e) => {

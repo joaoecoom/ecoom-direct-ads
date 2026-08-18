@@ -379,6 +379,7 @@ app.post("/api/projects/:id/assets/:assetId/animate", async (req, res) => {
   }
 
   const prompt = String(req.body?.prompt || "").trim();
+  const lastFrameAssetId = String(req.body?.lastFrameAssetId || "").trim() || null;
   const id = randomUUID().slice(0, 8);
 
   await createJob({
@@ -388,6 +389,7 @@ app.post("/api/projects/:id/assets/:assetId/animate", async (req, res) => {
       type: "asset_video",
       projectId: req.params.id,
       sourceAssetId: req.params.assetId,
+      lastFrameAssetId,
       prompt,
     },
   });
