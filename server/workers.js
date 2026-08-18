@@ -370,6 +370,8 @@ async function runVideosJob(job, onProgress) {
     );
   }
 
+  const isUgcFlow = shouldUseUgcFlow(storyboard, adConfig, scenes.length);
+
   const outputDir = path.join(
     PROJECT_ROOT,
     "output",
@@ -427,7 +429,29 @@ async function runVideosJob(job, onProgress) {
     videoAssetIds.push(asset.id);
   }
 
-  return { videoAssetIds, clipCount: clips.length, outputDir };
+  const baseResult = { videoAssetIds, clipCount: clips.length, outputDir, veoFlow: isUgcFlow };
+
+  if (job.request.autoRebuild !== false) {
+    onProgress?.({
+      step: "rebuild",
+      message: "A montar vídeo final — pronto para export…",
+    });
+    const rebuildResult = await runRebuildJob(
+      {
+        id: job.id,
+        request: { type: "rebuild", projectId, creativeId: cid },
+      },
+      onProgress,
+    );
+    return {
+      ...baseResult,
+      ...rebuildResult,
+      exportReady: true,
+      autoRebuilt: true,
+    };
+  }
+
+  return baseResult;
 }
 
 async function runSceneVideoJob(job, onProgress) {

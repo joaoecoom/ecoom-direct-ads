@@ -27,6 +27,10 @@ function bindExportEvents() {
   });
   document.getElementById("btn-copy-export")?.addEventListener("click", onCopyExportText);
 
+  window.addEventListener("ecoom:refresh-export", () => {
+    if (activeProjectId) void renderExportPanel(activeProjectId);
+  });
+
   panel.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-export-asset]");
     if (btn) previewHistoryExport(btn.dataset.exportAsset);

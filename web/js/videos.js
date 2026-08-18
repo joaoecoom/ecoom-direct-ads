@@ -140,7 +140,7 @@ async function onAnimateAll() {
   setVideosProgress(0, 1);
 
   try {
-    const data = await animateAllVideos(activeProjectId);
+    const data = await animateAllVideos(activeProjectId, { autoRebuild: true });
     startJobPoll(data.jobId, data.sceneCount || 1);
   } catch (err) {
     showVideosError(err.message);
@@ -174,16 +174,26 @@ function startJobPoll(jobId, sceneTotal = 1, label = "Animate All") {
       if (idx && total) setVideosProgress(idx, total);
       setVideosStatus(job.progress?.message || `${label}: ${job.status}`);
     },
-    onComplete: async () => {
+    onComplete: async (job) => {
       document.getElementById("btn-animate-all")?.removeAttribute("disabled");
       await initProjects();
       await renderVideosPanel(activeProjectId);
-      setVideosStatus("Animação concluída");
+      const exportReady = job?.result?.exportReady;
+      setVideosStatus(
+        exportReady ? "Vídeo final pronto — tab Export" : "Animação concluída",
+      );
       window.dispatchEvent(
         new CustomEvent("ecoom:job-complete", {
           detail: { projectId: activeProjectId, jobId },
         }),
       );
+      if (exportReady) {
+        window.dispatchEvent(
+          new CustomEvent("ecoom:export-ready", {
+            detail: { projectId: activeProjectId, jobId },
+          }),
+        );
+      }
     },
     onFailed: (job) => {
       showVideosError(job.error || "Animação falhou");

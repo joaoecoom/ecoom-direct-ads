@@ -206,12 +206,42 @@ export async function regenerateSceneImage(projectId, sceneId) {
   return data;
 }
 
-export async function animateAllVideos(projectId) {
+export async function animateAllVideos(projectId, body = {}) {
   const res = await fetch(`${API_URL}/api/projects/${projectId}/videos/generate`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ autoRebuild: body.autoRebuild !== false }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Animate All falhou");
+  return data;
+}
+
+export async function fetchCharacters() {
+  const res = await fetch(`${API_URL}/api/characters`);
+  if (!res.ok) throw new Error("Personagens indisponíveis");
+  return res.json();
+}
+
+export async function setProjectAvatar(projectId, body) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/avatar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao definir personagem");
+  return data;
+}
+
+export async function addProjectReference(projectId, assetId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/references`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assetId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Erro ao adicionar referência");
   return data;
 }
 

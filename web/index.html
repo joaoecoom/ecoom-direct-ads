@@ -28,6 +28,9 @@
           <button type="button" class="sidebar-link" data-nav="library">
             <span class="icon">▣</span> Library
           </button>
+          <button type="button" class="sidebar-link" data-nav="characters">
+            <span class="icon">◎</span> Personagens
+          </button>
           <button type="button" class="sidebar-link" data-nav="templates">
             <span class="icon">◇</span> Templates
           </button>
@@ -127,11 +130,25 @@
               </div>
             </div>
             <div id="assets-notice" class="card pipeline-hint hidden"></div>
-            <div class="assets-layout">
-              <div id="assets-grid" class="assets-grid"></div>
-              <aside id="asset-actions-panel" class="asset-actions-panel card">
-                <p class="muted">Selecciona um asset para ver acções.</p>
-              </aside>
+            <div id="assets-dropzone" class="assets-dropzone card hidden">
+              <div class="assets-dropzone-inner">
+                <strong>Solta ficheiros aqui</strong>
+                <p class="muted">Imagens e vídeos — entram no projecto antes de gerar o ad.</p>
+              </div>
+            </div>
+            <div class="assets-workspace">
+              <nav id="assets-filter-nav" class="assets-filter-nav card" aria-label="Filtrar assets">
+                <button type="button" class="assets-filter active" data-assets-filter="all">Todas</button>
+                <button type="button" class="assets-filter" data-assets-filter="image">Imagens</button>
+                <button type="button" class="assets-filter" data-assets-filter="video">Vídeos</button>
+                <button type="button" class="assets-filter" data-assets-filter="character">Personagens</button>
+              </nav>
+              <div class="assets-layout">
+                <div id="assets-grid" class="assets-grid"></div>
+                <aside id="asset-actions-panel" class="asset-actions-panel card">
+                  <p class="muted">Selecciona um asset para ver acções.</p>
+                </aside>
+              </div>
             </div>
           </div>
 
@@ -353,7 +370,7 @@
             </div>
             <div id="export-empty" class="card empty-state hidden">
               <h3>Sem export ainda</h3>
-              <p class="muted">Completa Images → Videos → Timeline e faz Rebuild Final Video.</p>
+              <p class="muted">Ao concluir «Gerar Vídeo Completo» ou «Animate All», o MP4 fica aqui automaticamente.</p>
             </div>
             <div id="export-history-wrap" class="card hidden">
               <h3>Export history</h3>
@@ -366,9 +383,20 @@
         <section id="view-library" class="view hidden">
           <header class="view-header">
             <h1>Library</h1>
-            <p class="muted">Imagens, vídeos, produtos e personagens — Fase 3.</p>
+            <p class="muted">Todos os assets de todos os projectos.</p>
           </header>
           <div id="library-grid" class="scene-images-grid"></div>
+        </section>
+
+        <!-- CHARACTERS -->
+        <section id="view-characters" class="view hidden">
+          <header class="view-header">
+            <div>
+              <h1>Personagens</h1>
+              <p class="muted">Avatars partilhados entre projectos — cria ads a partir de qualquer personagem.</p>
+            </div>
+          </header>
+          <div id="characters-grid" class="characters-grid"></div>
         </section>
 
         <!-- TEMPLATES -->

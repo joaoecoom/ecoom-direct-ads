@@ -15,6 +15,7 @@ import { destroyTimelineTab, initTimelineTab, renderTimelinePanel } from "./time
 import { destroyExportTab, initExportTab, renderExportPanel } from "./export.js";
 import { initCreativesRail, renderCreativesRail } from "./creatives.js";
 import { destroyAssetsHub, initAssetsHub, renderAssetsHub } from "./assets-hub.js";
+import { renderCharactersView } from "./characters.js";
 import {
   getEntryRoute,
   getStartingPoint,
@@ -27,6 +28,7 @@ const views = {
   projects: document.getElementById("view-projects"),
   project: document.getElementById("view-project"),
   library: document.getElementById("view-library"),
+  characters: document.getElementById("view-characters"),
   templates: document.getElementById("view-templates"),
   settings: document.getElementById("view-settings"),
   account: document.getElementById("view-account"),
@@ -100,6 +102,10 @@ function renderRoute() {
     case "library":
       views.library?.classList.remove("hidden");
       void renderLibrary();
+      break;
+    case "characters":
+      views.characters?.classList.remove("hidden");
+      void renderCharactersView();
       break;
     case "templates":
       views.templates?.classList.remove("hidden");
@@ -719,6 +725,16 @@ window.addEventListener("ecoom:project-synced", (e) => {
 window.addEventListener("ecoom:switch-tab", (e) => {
   const tab = e.detail?.tab;
   if (tab && currentProjectId) switchWorkspaceTab(tab);
+});
+
+window.addEventListener("ecoom:export-ready", async (e) => {
+  await initProjects();
+  const id = e.detail?.projectId;
+  if (id && currentProjectId === id) {
+    renderProjectWorkspace(id);
+    switchWorkspaceTab("export");
+    window.dispatchEvent(new CustomEvent("ecoom:refresh-export"));
+  }
 });
 
 window.addEventListener("ecoom:creative-changed", async (e) => {

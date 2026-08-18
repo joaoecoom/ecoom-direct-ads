@@ -331,6 +331,85 @@ app.post("/api/projects/:id/assets/:assetId/variations", async (req, res) => {
   res.status(202).json({ jobId: id, status: "queued", type: "variations", count });
 });
 
+app.get("/api/characters", async (_req, res) => {
+  const projects = await listProjects();
+  const characters = [];
+
+  for (const project of projects) {
+    if (project.avatar?.anchorImageAssetId) {
+      characters.push({
+        id: `${project.id}-${project.avatar.anchorImageAssetId}`,
+        projectId: project.id,
+        projectName: project.name,
+        assetId: project.avatar.anchorImageAssetId,
+        characterBrief: project.avatar.characterBrief || "",
+        settingBrief: project.avatar.settingBrief || "",
+        source: "avatar",
+      });
+    }
+    const assets = await listAssetsByProject(project.id);
+    for (const asset of assets) {
+      if (asset.metadata?.role === "character" && asset.type === "image") {
+        if (project.avatar?.anchorImageAssetId === asset.id) continue;
+        characters.push({
+          id: `${project.id}-${asset.id}`,
+          projectId: project.id,
+          projectName: project.name,
+          assetId: asset.id,
+          characterBrief: asset.prompt || asset.metadata?.label || "",
+          settingBrief: "",
+          source: "asset",
+        });
+      }
+    }
+  }
+
+  res.json({ characters });
+});
+
+app.post("/api/projects/:id/avatar", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const { assetId, characterBrief, settingBrief } = req.body || {};
+  if (!assetId) return res.status(400).json({ error: "assetId obrigatório" });
+
+  const asset = await getAsset(assetId);
+  if (!asset || asset.projectId !== req.params.id) {
+    return res.status(404).json({ error: "Asset não encontrado neste projecto" });
+  }
+  if (asset.type !== "image") {
+    return res.status(400).json({ error: "Avatar tem de ser uma imagem" });
+  }
+
+  const updated = await updateProject(req.params.id, {
+    avatar: {
+      anchorImageAssetId: assetId,
+      characterBrief: String(characterBrief || asset.prompt || "").trim(),
+      settingBrief: String(settingBrief || "").trim(),
+    },
+  });
+
+  res.json(updated);
+});
+
+app.post("/api/projects/:id/references", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const { assetId } = req.body || {};
+  if (!assetId) return res.status(400).json({ error: "assetId obrigatório" });
+
+  const asset = await getAsset(assetId);
+  if (!asset || asset.projectId !== req.params.id) {
+    return res.status(404).json({ error: "Asset não encontrado neste projecto" });
+  }
+
+  const refs = [...new Set([...(project.referenceAssetIds || []), assetId])];
+  const updated = await updateProject(req.params.id, { referenceAssetIds: refs });
+  res.json(updated);
+});
+
 app.post("/api/projects/:id/blueprint", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
@@ -444,11 +523,18 @@ app.post("/api/projects/:id/videos/generate", async (req, res) => {
     return res.status(400).json({ error: "Gera blueprint e imagens primeiro" });
   }
 
+  const creativeId = project.activeCreativeId;
+  const autoRebuild = req.body?.autoRebuild !== false;
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
     type: "videos",
-    request: { type: "videos", projectId: req.params.id, creativeId: project.activeCreativeId },
+    request: {
+      type: "videos",
+      projectId: req.params.id,
+      creativeId,
+      autoRebuild,
+    },
   });
 
   enqueue(id);

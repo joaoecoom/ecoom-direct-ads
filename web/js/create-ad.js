@@ -337,13 +337,10 @@ async function onGenerateVideo() {
     const im = await generateAllImages(project.id);
     await runJobAndWait(im.jobId, "images");
 
-    const vid = await animateAllVideos(project.id);
+    const vid = await animateAllVideos(project.id, { autoRebuild: true });
     await runJobAndWait(vid.jobId, "videos");
 
-    const fin = await rebuildTimeline(project.id);
-    await runJobAndWait(fin.jobId, "rebuild");
-
-    void linkJobToProject(project.id, fin.jobId);
+    void linkJobToProject(project.id, vid.jobId);
     const exports = await fetchProjectExports(project.id);
     if (exports.latestExport?.assetId) {
       els.resultVideo.src = `${assetFileUrl(exports.latestExport.assetId)}?t=${Date.now()}`;
@@ -356,8 +353,13 @@ async function onGenerateVideo() {
     els.genVideoBtn.disabled = false;
     els.genVideoBtn.textContent = "Gerar Vídeo Completo";
     window.dispatchEvent(
+      new CustomEvent("ecoom:export-ready", {
+        detail: { projectId: project.id, jobId: vid.jobId },
+      }),
+    );
+    window.dispatchEvent(
       new CustomEvent("ecoom:job-complete", {
-        detail: { projectId: project.id, jobId: fin.jobId },
+        detail: { projectId: project.id, jobId: vid.jobId },
       }),
     );
   } catch (err) {
