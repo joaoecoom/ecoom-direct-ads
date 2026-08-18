@@ -11,6 +11,7 @@ import {
 } from "./api.js";
 import {
   getBuiltBrief,
+  getLoadedProjectId,
   getWizardState,
   initBriefWizard,
   loadWizardFromProject,
@@ -85,6 +86,8 @@ function bindEvents() {
 }
 
 function onWizardChange({ complete, brief }) {
+  if (getLoadedProjectId() !== activeProjectId) return;
+
   if (brief && els.briefPreview) {
     els.briefPreview.value = brief;
   }
@@ -104,12 +107,20 @@ function showBriefReview() {
 }
 
 function persistWizard() {
-  if (!activeProjectId) return;
+  if (!activeProjectId || !wizardReady) return;
   const wizard = getWizardState();
   void updateProject(activeProjectId, {
     masterPrompt: getBuiltBrief(),
     settings: wizardToSettings(wizard, config),
   });
+}
+
+function showWizardFresh() {
+  els.briefSection?.classList.add("hidden");
+  els.wizardSection?.classList.remove("hidden");
+  if (els.briefPreview) els.briefPreview.value = "";
+  if (els.genCopyBtn) els.genCopyBtn.disabled = true;
+  if (els.genVideoBtn) els.genVideoBtn.disabled = true;
 }
 
 export function refreshCreateAdForm(projectId) {
@@ -118,15 +129,20 @@ export function refreshCreateAdForm(projectId) {
   const project = getProject(projectId);
   if (!project) return;
 
+  wizardReady = false;
+  hideError();
+  els.jobPanel?.classList.add("hidden");
+
   loadWizardFromProject(project);
   setWizardConfig(config);
-  wizardReady = true;
 
-  if (project.masterPrompt?.includes("## Produto")) {
+  const hasCompiledBrief = Boolean(project.masterPrompt?.includes("## Produto"));
+
+  if (hasCompiledBrief) {
     if (els.briefPreview) els.briefPreview.value = project.masterPrompt;
     showBriefReview();
-  } else if (project.masterPrompt && els.briefPreview) {
-    els.briefPreview.value = project.masterPrompt;
+  } else {
+    showWizardFresh();
   }
 
   if (project.latestCopy) {
@@ -134,7 +150,12 @@ export function refreshCreateAdForm(projectId) {
   } else {
     els.copyReview?.classList.add("hidden");
     approvedCopy = null;
+    if (!project.latestCopy) {
+      if (els.genVideoBtn) els.genVideoBtn.disabled = true;
+    }
   }
+
+  wizardReady = true;
 }
 
 async function loadConfig() {

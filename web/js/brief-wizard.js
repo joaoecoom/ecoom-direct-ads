@@ -70,6 +70,7 @@ let state = { ...WIZARD_DEFAULTS };
 let stepIndex = 0;
 let config = null;
 let onChangeCb = null;
+let loadedProjectId = null;
 
 const els = {};
 
@@ -88,15 +89,33 @@ export function setWizardConfig(cfg) {
   renderStep();
 }
 
+export function resetWizard() {
+  state = { ...WIZARD_DEFAULTS };
+  stepIndex = 0;
+  loadedProjectId = null;
+  renderStep();
+  updateProgress();
+}
+
 export function loadWizardFromProject(project) {
-  state = settingsToWizard(project?.settings || {});
-  if (project?.masterPrompt) {
-    const parsed = tryParseBrief(project.masterPrompt);
+  loadedProjectId = project?.id || null;
+  state = { ...WIZARD_DEFAULTS, ...settingsToWizard(project?.settings || {}) };
+
+  const prompt = project?.masterPrompt?.trim() || "";
+  if (prompt.includes("## Produto")) {
+    const parsed = tryParseBrief(prompt);
     if (parsed) state = { ...state, ...parsed };
+  } else if (prompt) {
+    state.product = prompt;
   }
+
   stepIndex = 0;
   renderStep();
   updateProgress();
+}
+
+export function getLoadedProjectId() {
+  return loadedProjectId;
 }
 
 export function getWizardState() {
