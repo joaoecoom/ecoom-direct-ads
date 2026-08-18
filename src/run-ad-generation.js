@@ -205,6 +205,9 @@ export async function runAdGeneration({
 
   let finalVideo = manifest.finalVideo;
 
+  let sceneClipPaths = manifest.clips;
+  let voicedClips = null;
+
   if (useExternalTts) {
     await progress("voice", "A gerar voz PT-PT...");
     const audioDir = path.join(config.outputDir, `audio-${runId}`);
@@ -224,7 +227,6 @@ export async function runAdGeneration({
       }
     }
 
-    let voicedClips;
     if (isLipSyncAvailable()) {
       await progress("lipsync", "Lip sync Sync Labs...");
       const syncedDir = path.join(config.outputDir, `synced-${runId}`);
@@ -234,6 +236,8 @@ export async function runAdGeneration({
       const voicedDir = path.join(config.outputDir, `voiced-${runId}`);
       voicedClips = await mixSceneClipsWithVoice(sceneClips, voicedDir);
     }
+
+    sceneClipPaths = voicedClips;
 
     finalVideo = path.join(config.outputDir, `${slug}-${runId}.mp4`);
     await concatenateVideos(voicedClips, finalVideo, {
@@ -270,5 +274,8 @@ export async function runAdGeneration({
     copyPath,
     copy: exportCopy,
     manifest,
+    generatedImages,
+    sceneClipPaths,
+    assetsRunDir,
   };
 }

@@ -20,6 +20,7 @@ import {
 import { pickAdOverrides } from "./ad-overrides.js";
 import { rebuildTimelineVideo } from "../src/lib/timeline-rebuild.js";
 import { resolveSceneVideoPath } from "./timeline.js";
+import { syncGenerationAssetsToProject } from "./project-sync.js";
 
 export function loadStoryboardForProject(project) {
   const storyboardPath =
@@ -53,6 +54,33 @@ async function resolveSceneImagePath(project, scene) {
   const asset = await getAsset(scene.imageAssetId);
   if (!asset) throw new Error(`Asset imagem ${scene.imageAssetId} não encontrado`);
   return resolveAssetFile(asset);
+}
+
+async function resolveProjectAvatarPath(project) {
+  const anchorId = project?.avatar?.anchorImageAssetId;
+  if (!anchorId) return null;
+  const asset = await getAsset(anchorId);
+  if (!asset) return null;
+  try {
+    return resolveAssetFile(asset);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveProjectReferencePaths(project) {
+  const ids = project?.referenceAssetIds || [];
+  const paths = [];
+  for (const id of ids) {
+    const asset = await getAsset(id);
+    if (!asset) continue;
+    try {
+      paths.push(resolveAssetFile(asset));
+    } catch {
+      /* skip missing files */
+    }
+  }
+  return paths;
 }
 
 async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order }) {
@@ -115,6 +143,7 @@ async function runFullAdJob(job, onProgress) {
       storyboardPath: result.storyboardPath,
       storyboard: result.storyboard,
     });
+    await syncGenerationAssetsToProject(projectId, job.id, result);
     await linkJobToProject(projectId, job.id, {
       title: result.storyboard?.title,
       storyboardPath: result.storyboardPath,
@@ -132,6 +161,10 @@ async function runFullAdJob(job, onProgress) {
     storyboardPath: result.storyboardPath,
     title: result.storyboard?.title,
     storyboard: result.storyboard,
+    generatedImages: result.generatedImages,
+    sceneClipPaths: result.sceneClipPaths,
+    manifest: result.manifest,
+    runId: result.runId,
   };
 }
 
@@ -192,6 +225,8 @@ async function runImagesJob(job, onProgress) {
     storyboard,
     adConfig,
     outputDir,
+    avatarImagePath: await resolveProjectAvatarPath(project),
+    referenceImagePaths: await resolveProjectReferencePaths(project),
     onProgress: (u) =>
       onProgress?.({
         step: u.step,

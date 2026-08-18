@@ -198,6 +198,32 @@
               </div>
             </div>
             <div id="images-error" class="card error hidden"></div>
+            <div id="avatar-panel" class="card avatar-panel hidden">
+              <div class="avatar-panel-head">
+                <div>
+                  <h3>Avatar do projecto</h3>
+                  <p id="avatar-meta" class="muted">Mesma personagem em novos vídeos — roupa/cenário podem mudar.</p>
+                </div>
+                <button type="button" class="btn sm" id="btn-sync-last-job">Importar do último job</button>
+              </div>
+              <div class="avatar-panel-body">
+                <div id="avatar-thumb" class="scene-thumb empty"><span>Sem avatar</span></div>
+                <p id="avatar-brief" class="muted scene-prompt"></p>
+              </div>
+            </div>
+            <div id="references-panel" class="card references-panel hidden">
+              <div class="references-panel-head">
+                <div>
+                  <h3>Referências</h3>
+                  <p class="muted">Roupas, produtos, carros — usadas na geração de imagens.</p>
+                </div>
+                <label class="btn sm upload-label">
+                  + Referência
+                  <input type="file" id="upload-reference-input" accept="image/*" multiple hidden />
+                </label>
+              </div>
+              <div id="references-grid" class="references-grid"></div>
+            </div>
             <div id="scene-images-grid" class="scene-images-grid"></div>
           </div>
 

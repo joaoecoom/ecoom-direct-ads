@@ -937,6 +937,67 @@ video {
   display: block;
 }
 
+.avatar-panel,
+.references-panel {
+  margin-bottom: 1rem;
+}
+
+.avatar-panel-head,
+.references-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.avatar-panel-head h3,
+.references-panel-head h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.avatar-panel-body {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.avatar-thumb {
+  width: 120px;
+  flex-shrink: 0;
+  aspect-ratio: 9 / 16;
+}
+
+.references-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.reference-chip {
+  margin: 0;
+  width: 88px;
+}
+
+.reference-chip img {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.reference-chip figcaption {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .scene-prompt {
   font-size: 0.75rem;
   margin: 0 0 0.5rem;

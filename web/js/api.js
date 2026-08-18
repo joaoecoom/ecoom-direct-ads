@@ -105,6 +105,15 @@ export async function fetchProjectStoryboard(projectId) {
   return res.json();
 }
 
+export async function syncJobToProject(projectId, jobId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/sync-job/${jobId}`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Sync falhou");
+  return data;
+}
+
 export async function fetchProjectAssets(projectId) {
   const res = await fetch(`${API_URL}/api/projects/${projectId}/assets`);
   if (!res.ok) throw new Error("Assets indisponíveis");

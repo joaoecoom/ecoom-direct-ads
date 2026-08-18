@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { generateImage, generateImageVariation } from "./imagen.js";
+import { generateImage, generateImageVariation, generateImageWithReferences } from "./imagen.js";
 import { sleep } from "../config.js";
 
 /**
@@ -11,6 +11,8 @@ export async function generateStoryboardImages({
   storyboard,
   adConfig,
   outputDir,
+  avatarImagePath = null,
+  referenceImagePaths = [],
   onProgress,
 }) {
   await fs.mkdir(outputDir, { recursive: true });
@@ -20,6 +22,10 @@ export async function generateStoryboardImages({
   const sceneTotal = storyboard.scenes.length;
   const results = [];
   let previousImagePath = null;
+  const refNote =
+    referenceImagePaths.length > 0
+      ? " Include the referenced products/props naturally in frame."
+      : "";
 
   for (let i = 0; i < storyboard.scenes.length; i++) {
     const scene = storyboard.scenes[i];
@@ -34,7 +40,25 @@ export async function generateStoryboardImages({
       message: `Imagem ${i + 1}/${sceneTotal}: ${id}`,
     });
 
-    if (isUgc && i === 0) {
+    if (isUgc && i === 0 && avatarImagePath) {
+      const avatarPrompt = `${scene.imagePrompt}${refNote} Same person identity as reference avatar — new outfit/setting allowed but preserve face and body type.`;
+      await generateImageVariation({
+        prompt: avatarPrompt,
+        referenceImagePath: avatarImagePath,
+        outputPath: imageFile,
+        aspectRatio,
+        sceneIndex: 1,
+        sceneTotal,
+      });
+    } else if (isUgc && i === 0 && referenceImagePaths.length) {
+      await generateImageWithReferences({
+        prompt: `${scene.imagePrompt}${refNote}`,
+        referenceImagePaths,
+        outputPath: imageFile,
+        aspectRatio,
+        ugc: true,
+      });
+    } else if (isUgc && i === 0) {
       await generateImage({
         prompt: scene.imagePrompt,
         outputPath: imageFile,

@@ -46,6 +46,8 @@ function normalizeProject(raw) {
     latestExport,
     timelineStatus: raw.timelineStatus || "pending",
     latestCopy: raw.latestCopy || null,
+    avatar: raw.avatar || null,
+    referenceAssetIds: raw.referenceAssetIds || [],
   };
 }
 

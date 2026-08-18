@@ -42,6 +42,7 @@ import { persistJobFailed, persistJobProgress, runJob } from "./workers.js";
 import { pickAdOverrides } from "./ad-overrides.js";
 import { buildTimelineView } from "./timeline.js";
 import { buildExportView } from "./exports.js";
+import { syncGenerationAssetsToProject } from "./project-sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -184,7 +185,7 @@ app.post("/api/projects/:id/assets", async (req, res) => {
   const project = await getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
 
-  const { data, filename, sceneId, mimeType } = req.body || {};
+  const { data, filename, sceneId, mimeType, role, label } = req.body || {};
   if (!data) return res.status(400).json({ error: "Campo 'data' (base64) obrigatório" });
 
   const buffer = Buffer.from(data, "base64");
@@ -193,19 +194,29 @@ app.post("/api/projects/:id/assets", async (req, res) => {
   }
 
   const ext = (filename || "upload.png").split(".").pop() || "png";
+  const isReference = role === "reference";
   const asset = await createAsset({
     projectId: req.params.id,
     sceneId: sceneId || null,
     type: "image",
-    source: "upload",
-    prompt: filename || "upload",
+    source: isReference ? "reference" : "upload",
+    prompt: label || filename || (isReference ? "referência" : "upload"),
     fileBuffer: buffer,
     ext,
-    metadata: { mimeType: mimeType || "image/png", originalName: filename },
+    metadata: {
+      mimeType: mimeType || "image/png",
+      originalName: filename,
+      role: isReference ? "reference" : "scene",
+      label: label || filename || "",
+    },
   });
 
   await addProjectAssetId(req.params.id, asset.id);
   if (sceneId) await linkAssetToScene(req.params.id, sceneId, asset.id);
+  if (isReference) {
+    const refs = [...new Set([...(project.referenceAssetIds || []), asset.id])];
+    await updateProject(req.params.id, { referenceAssetIds: refs });
+  }
 
   res.status(201).json(asset);
 });
@@ -477,6 +488,29 @@ app.post("/api/projects/:id/timeline/rebuild", async (req, res) => {
 
   enqueue(id);
   res.status(202).json({ jobId: id, status: "queued", type: "rebuild" });
+});
+
+/** Recupera imagens/clips/export de um job full_ad já concluído */
+app.post("/api/projects/:id/sync-job/:jobId", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const job = await getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job não encontrado" });
+  if (job.status !== "completed") {
+    return res.status(400).json({ error: "Job ainda não concluído." });
+  }
+
+  try {
+    const sync = await syncGenerationAssetsToProject(
+      req.params.id,
+      req.params.jobId,
+      { ...job.result, runId: job.result?.runId || req.params.jobId },
+    );
+    res.json({ ok: true, ...sync });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/jobs", async (_req, res) => {

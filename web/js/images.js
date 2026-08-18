@@ -1,9 +1,11 @@
 import {
   assetFileUrl,
+  fetchJob,
   fetchProjectAssets,
   generateAllImages,
   generateBlueprint,
   regenerateSceneImage,
+  syncJobToProject,
   uploadAsset,
 } from "./api.js";
 import { trackJob, stopJobTracking } from "./job-activity.js";
@@ -26,6 +28,8 @@ function bindImageEvents() {
   document.getElementById("btn-gen-blueprint")?.addEventListener("click", onGenerateBlueprint);
   document.getElementById("btn-gen-all-images")?.addEventListener("click", onGenerateAllImages);
   document.getElementById("upload-asset-input")?.addEventListener("change", onUploadFiles);
+  document.getElementById("upload-reference-input")?.addEventListener("change", onUploadReferences);
+  document.getElementById("btn-sync-last-job")?.addEventListener("click", () => void onSyncLastJob());
 
   panel.addEventListener("click", (e) => {
     const regen = e.target.closest("[data-regen-scene]");
@@ -51,6 +55,62 @@ function setImagesStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function renderAvatarPanel(project, assetById) {
+  const panel = document.getElementById("avatar-panel");
+  const thumb = document.getElementById("avatar-thumb");
+  const brief = document.getElementById("avatar-brief");
+  if (!panel || !thumb) return;
+
+  const avatar = project?.avatar;
+  if (!avatar?.anchorImageAssetId && !avatar?.characterBrief) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  const asset = avatar.anchorImageAssetId ? assetById[avatar.anchorImageAssetId] : null;
+  const src = asset ? assetFileUrl(asset.id) : "";
+
+  thumb.className = `scene-thumb avatar-thumb ${src ? "" : "empty"}`;
+  thumb.innerHTML = src
+    ? `<img src="${src}?t=${Date.now()}" alt="Avatar" loading="lazy" />`
+    : "<span>Sem avatar</span>";
+
+  if (brief) {
+    const parts = [];
+    if (avatar.characterBrief) parts.push(avatar.characterBrief);
+    if (avatar.settingBrief) parts.push(`Cenário: ${avatar.settingBrief}`);
+    brief.textContent = parts.join(" · ").slice(0, 280);
+  }
+}
+
+function renderReferencesPanel(project, assets) {
+  const panel = document.getElementById("references-panel");
+  const grid = document.getElementById("references-grid");
+  if (!panel || !grid) return;
+
+  const refIds = project?.referenceAssetIds || [];
+  const refs = refIds
+    .map((id) => assets.find((a) => a.id === id))
+    .filter(Boolean);
+
+  if (panel.classList.contains("hidden")) return;
+  if (!refs.length) {
+    grid.innerHTML = `<p class="muted">Ainda sem referências — adiciona produtos, roupas ou props.</p>`;
+    return;
+  }
+
+  grid.innerHTML = refs
+    .map(
+      (asset) => `
+    <figure class="reference-chip">
+      <img src="${assetFileUrl(asset.id)}?t=${Date.now()}" alt="${escapeHtml(asset.prompt || "ref")}" loading="lazy" />
+      <figcaption>${escapeHtml((asset.metadata?.label || asset.prompt || "ref").slice(0, 40))}</figcaption>
+    </figure>`,
+    )
+    .join("");
+}
+
 export async function renderImagesPanel(projectId) {
   activeProjectId = projectId;
   hideImagesError();
@@ -62,6 +122,8 @@ export async function renderImagesPanel(projectId) {
   const hasBlueprint = Boolean(
     project?.blueprintPath || project?.blueprint || project?.scenes?.length,
   );
+
+  document.getElementById("references-panel")?.classList.toggle("hidden", !hasBlueprint);
 
   document.getElementById("btn-gen-all-images")?.toggleAttribute(
     "disabled",
@@ -80,6 +142,13 @@ export async function renderImagesPanel(projectId) {
   }
 
   const assetById = Object.fromEntries(assets.map((a) => [a.id, a]));
+  renderAvatarPanel(project, assetById);
+  renderReferencesPanel(project, assets);
+
+  const syncBtn = document.getElementById("btn-sync-last-job");
+  const lastJobId = project?.jobIds?.[project.jobIds.length - 1];
+  const imagesMissing = scenes.length && scenes.every((s) => !s.imageAssetId);
+  syncBtn?.classList.toggle("hidden", !imagesMissing || !lastJobId);
 
   if (!scenes.length) {
     grid.innerHTML = `
@@ -113,17 +182,53 @@ export async function renderImagesPanel(projectId) {
     .join("");
 }
 
-async function onGenerateBlueprint() {
+async function onSyncLastJob() {
   if (!activeProjectId) return;
   hideImagesError();
   const project = getProject(activeProjectId);
+  const jobId = project?.jobIds?.[project.jobIds.length - 1];
+  if (!jobId) {
+    showImagesError("Nenhum job encontrado neste projecto.");
+    return;
+  }
+
+  const btn = document.getElementById("btn-sync-last-job");
+  btn.disabled = true;
+  setImagesStatus("A importar assets do job...");
+
+  try {
+    const job = await fetchJob(jobId);
+    if (job?.status !== "completed") {
+      throw new Error("O último job ainda não terminou.");
+    }
+    await syncJobToProject(activeProjectId, jobId);
+    await initProjects();
+    await renderImagesPanel(activeProjectId);
+    setImagesStatus("Assets importados — imagens, vídeos e export actualizados.");
+    window.dispatchEvent(
+      new CustomEvent("ecoom:job-complete", {
+        detail: { projectId: activeProjectId, jobId },
+      }),
+    );
+  } catch (err) {
+    showImagesError(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function onGenerateBlueprint() {
+  if (!activeProjectId) return;
+  hideImagesError();
   const btn = document.getElementById("btn-gen-blueprint");
   btn.disabled = true;
   setImagesStatus("A gerar blueprint...");
 
   try {
-    const data = await generateBlueprint(activeProjectId, {
-      offer: project?.masterPrompt,
+    const project = await ensureProjectOnServer(activeProjectId);
+    activeProjectId = project.id;
+    const data = await generateBlueprint(project.id, {
+      offer: project.masterPrompt,
     });
     startJobPoll(data.jobId, "Blueprint", "blueprint");
   } catch (err) {
@@ -140,7 +245,9 @@ async function onGenerateAllImages() {
   setImagesStatus("A gerar imagens...");
 
   try {
-    const data = await generateAllImages(activeProjectId);
+    const project = await ensureProjectOnServer(activeProjectId);
+    activeProjectId = project.id;
+    const data = await generateAllImages(project.id);
     startJobPoll(data.jobId, "Images");
   } catch (err) {
     showImagesError(err.message);
@@ -160,6 +267,19 @@ async function onRegenerateScene(sceneId) {
   }
 }
 
+async function uploadFilesAs(files, { asReference = false } = {}) {
+  for (const file of files) {
+    const data = await fileToBase64(file);
+    await uploadAsset(activeProjectId, {
+      data,
+      filename: file.name,
+      mimeType: file.type,
+      role: asReference ? "reference" : undefined,
+      label: file.name,
+    });
+  }
+}
+
 async function onUploadFiles(e) {
   const files = e.target.files;
   if (!files?.length || !activeProjectId) return;
@@ -167,17 +287,28 @@ async function onUploadFiles(e) {
   setImagesStatus(`A enviar ${files.length} imagem(ns)...`);
 
   try {
-    for (const file of files) {
-      const data = await fileToBase64(file);
-      await uploadAsset(activeProjectId, {
-        data,
-        filename: file.name,
-        mimeType: file.type,
-      });
-    }
+    await uploadFilesAs(files);
     await initProjects();
     await renderImagesPanel(activeProjectId);
     setImagesStatus("Upload concluído");
+  } catch (err) {
+    showImagesError(err.message);
+  } finally {
+    e.target.value = "";
+  }
+}
+
+async function onUploadReferences(e) {
+  const files = e.target.files;
+  if (!files?.length || !activeProjectId) return;
+  hideImagesError();
+  setImagesStatus(`A adicionar ${files.length} referência(s)...`);
+
+  try {
+    await uploadFilesAs(files, { asReference: true });
+    await initProjects();
+    await renderImagesPanel(activeProjectId);
+    setImagesStatus("Referências adicionadas");
   } catch (err) {
     showImagesError(err.message);
   } finally {

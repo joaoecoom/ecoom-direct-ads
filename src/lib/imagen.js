@@ -126,6 +126,44 @@ export async function generateImage({
 }
 
 /**
+ * Imagem com referências extra (produto, roupa, carro, avatar).
+ */
+export async function generateImageWithReferences({
+  prompt,
+  referenceImagePaths = [],
+  outputPath,
+  aspectRatio = "9:16",
+  model = DEFAULT_MODEL,
+  ugc = false,
+  imageSize = process.env.GEMINI_IMAGE_SIZE || "2K",
+}) {
+  const client = createClient();
+  const finalPrompt = buildHumanizedImagePrompt(prompt, { ugc });
+
+  const contents = [createPartFromText(finalPrompt)];
+  for (const refPath of referenceImagePaths) {
+    const refBuffer = await fs.readFile(path.resolve(refPath));
+    contents.push(createPartFromBase64(refBuffer.toString("base64"), "image/png"));
+  }
+
+  console.log(
+    `🎨 Imagem com ${referenceImagePaths.length} referência(s)...`,
+  );
+
+  return withRetry("Imagem+refs", async () => {
+    const response = await callGenerateImage(client, {
+      model,
+      contents,
+      aspectRatio,
+      imageSize,
+    });
+    const absPath = await writeImageResponse(response, outputPath);
+    console.log(`✅ Imagem: ${absPath}\n`);
+    return absPath;
+  });
+}
+
+/**
  * Variação progressiva — referência à cena anterior (flow contínuo).
  */
 export async function generateImageVariation({
