@@ -23,7 +23,16 @@ import {
   MAX_SCENE_COUNT,
   MAX_TOTAL_DURATION_SECONDS,
   MIN_SCENE_COUNT,
+  resolveAdConfig,
 } from "../src/lib/ad-config.js";
+import {
+  buildGenerationPlan,
+  getProviderDiagnostics,
+} from "../src/lib/generation-service.js";
+import { suggestBrollFromTranscript } from "../src/lib/broll-engine.js";
+import { aggregateActualCosts, estimateRouteCost } from "../src/lib/cost-estimator.js";
+import { routeSceneVideoGeneration } from "../src/lib/model-router.js";
+import { loadStoryboardForProject } from "./workers.js";
 import { createJob, getJob, listJobs, listPendingJobs, resetStaleRunningJobs, safeUpdateJob, updateJob } from "./job-store.js";
 import {
   createAsset,
@@ -155,7 +164,121 @@ app.get("/api/config", (_req, res) => {
       liveProgress: true,
       briefWizard: true,
       maxSceneCount: MAX_SCENE_COUNT,
+      aiRouter: process.env.AI_ROUTER_ENABLED !== "false",
+      generationPlan: true,
+      floyoConfigured: Boolean(process.env.FLOYO_API_KEY),
     },
+    generationModes: ["auto", "cheapest", "best_quality", "manual"],
+  });
+});
+
+app.get("/api/providers/diagnostics", async (_req, res) => {
+  try {
+    const diagnostics = await getProviderDiagnostics();
+    res.json(diagnostics);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/projects/:id/generation/plan", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  try {
+    const creativeId = req.body?.creativeId || project.activeCreativeId;
+    const { storyboard } = loadStoryboardForProject(project, creativeId);
+    const adConfig = resolveAdConfig({ ...project.settings, ...(req.body?.settings || {}) });
+    const creative = project.creatives?.find((c) => c.id === creativeId);
+    const scenes = creative?.scenes || project.scenes || [];
+    const plan = buildGenerationPlan({ scenes, storyboard, adConfig, options: req.body?.options || {} });
+    res.json(plan);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/projects/:id/scenes/:sceneId/generation/route", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  try {
+    const creativeId = req.body?.creativeId || project.activeCreativeId;
+    const { storyboard } = loadStoryboardForProject(project, creativeId);
+    const adConfig = resolveAdConfig(project.settings || {});
+    const creative = project.creatives?.find((c) => c.id === creativeId);
+    const scene = creative?.scenes?.find((s) => s.id === req.params.sceneId);
+    if (!scene) return res.status(404).json({ error: "Cena não encontrada" });
+
+    const route = routeSceneVideoGeneration({
+      scene: { ...scene, ...(req.body?.sceneOverrides || {}) },
+      storyboard,
+      adConfig,
+      imagePath: scene.imageAssetId ? "pending" : null,
+      options: req.body?.options || {},
+    });
+    res.json({ route, estimate: estimateRouteCost(route) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/projects/:id/broll/suggest", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const transcript =
+    req.body?.transcript ||
+    project.copy?.voiceover ||
+    project.masterPrompt ||
+    "";
+  const suggestions = suggestBrollFromTranscript({
+    transcript,
+    totalSeconds: req.body?.totalSeconds || 30,
+    productContext: req.body?.productContext || project.name,
+    creativeBrief: project.masterPrompt,
+    optimizeForCost: req.body?.optimizeForCost !== false,
+  });
+  res.json({ suggestions, status: "IMPLEMENTED", tested: false });
+});
+
+app.get("/api/projects/:id/production/costs", async (req, res) => {
+  const project = await getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "Projecto não encontrado" });
+
+  const assets = await listAssetsByProject(req.params.id);
+  const generations = assets
+    .filter((a) => a.type === "video" && a.metadata?.provider)
+    .map((a) => ({
+      provider: a.metadata.provider,
+      model: a.metadata.model,
+      actualCostUsd: a.metadata.actualCostUsd ?? null,
+    }));
+
+  const actual = aggregateActualCosts(generations);
+  let estimated = null;
+  try {
+    const creativeId = project.activeCreativeId;
+    const { storyboard } = loadStoryboardForProject(project, creativeId);
+    const adConfig = resolveAdConfig(project.settings || {});
+    const creative = project.creatives?.find((c) => c.id === creativeId);
+    estimated = buildGenerationPlan({
+      scenes: creative?.scenes || [],
+      storyboard,
+      adConfig,
+    });
+  } catch {
+    estimated = null;
+  }
+
+  res.json({
+    estimated: estimated?.estimatedTotalUsd ?? null,
+    estimatedSummary: estimated?.summary ?? "COST UNKNOWN",
+    actual: actual.actualTotalUsd,
+    costUnknown: actual.costUnknown || estimated?.costUnknown,
+    byProvider: actual.byProvider,
+    byModel: actual.byModel,
+    status: "IMPLEMENTED",
   });
 });
 
@@ -619,6 +742,7 @@ app.post("/api/projects/:id/videos/generate", async (req, res) => {
 
   const creativeId = project.activeCreativeId;
   const autoRebuild = req.body?.autoRebuild !== false;
+  const generationApproved = req.body?.generationApproved === true;
   const id = randomUUID().slice(0, 8);
   await createJob({
     id,
@@ -628,6 +752,7 @@ app.post("/api/projects/:id/videos/generate", async (req, res) => {
       projectId: req.params.id,
       creativeId,
       autoRebuild,
+      generationApproved,
     },
   });
 
@@ -648,6 +773,9 @@ app.post("/api/projects/:id/scenes/:sceneId/video", async (req, res) => {
       projectId: req.params.id,
       sceneId: req.params.sceneId,
       motionPrompt: req.body?.motionPrompt || null,
+      generationApproved: req.body?.generationApproved === true,
+      generationProvider: req.body?.generationProvider || null,
+      generationModel: req.body?.generationModel || null,
     },
   });
 

@@ -29,6 +29,7 @@ import { syncGenerationAssetsToProject } from "./project-sync.js";
 import { generateAssetVariations } from "../src/lib/asset-variations.js";
 import { generateImage, generateImageWithReferences } from "../src/lib/imagen.js";
 import { generateVideoFromImage, generateVideoFromText } from "../src/lib/veo-client.js";
+import { buildGenerationPlan } from "../src/lib/generation-service.js";
 
 export function loadStoryboardForProject(project, creativeId = null) {
   const creative = resolveCreative(project, creativeId);
@@ -133,7 +134,17 @@ function promptWithVisualRefs(prompt, refs = []) {
   return lines.join("\n");
 }
 
-async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId, order, creativeId }) {
+async function registerVideoAsset({
+  projectId,
+  sceneId,
+  clipPath,
+  prompt,
+  jobId,
+  order,
+  creativeId,
+  generation = null,
+  parentAssetId = null,
+}) {
   const asset = await createAsset({
     projectId,
     sceneId,
@@ -142,7 +153,20 @@ async function registerVideoAsset({ projectId, sceneId, clipPath, prompt, jobId,
     prompt,
     sourcePath: clipPath,
     ext: "mp4",
-    metadata: { jobId, order },
+    metadata: {
+      jobId,
+      order,
+      provider: generation?.provider || generation?.generation?.provider || null,
+      model: generation?.model || generation?.generation?.model || null,
+      workflowId: generation?.route?.workflowId || generation?.generation?.lineage?.workflowId || null,
+      generationId: generation?.generation?.generationId || null,
+      parentAssetId: parentAssetId || generation?.generation?.lineage?.parentAssetId || null,
+      originalAssetId: generation?.generation?.lineage?.originalAssetId || null,
+      actualCostUsd: generation?.generation?.actualCostUsd ?? null,
+      gpuTimeMs: generation?.generation?.gpuTimeMs ?? null,
+      providerRequestId: generation?.generation?.providerRequestId || null,
+      route: generation?.route || null,
+    },
   });
   await registerSceneVideoAsset(projectId, sceneId, asset.id, creativeId);
   await addProjectAssetId(projectId, asset.id);
@@ -424,6 +448,26 @@ async function runVideosJob(job, onProgress) {
   }
 
   const isUgcFlow = shouldUseUgcFlow(storyboard, adConfig, scenes.length);
+  const generationApproved = job.request.generationApproved === true;
+
+  const plan = buildGenerationPlan({ scenes, storyboard, adConfig });
+  const needsPaidApproval = plan.scenes.some(
+    (s) => ["floyo", "kie"].includes(s.route?.provider) && !generationApproved,
+  );
+  if (needsPaidApproval) {
+    const err = new Error(
+      "Aprovação necessária para geração Floyo/KIE — consulta o plano de custo e confirma.",
+    );
+    err.code = "APPROVAL_REQUIRED";
+    err.plan = plan;
+    throw err;
+  }
+
+  onProgress?.({
+    step: "plan",
+    message: `Generation plan: ${plan.summary}`,
+    generationPlan: plan,
+  });
 
   const outputDir = path.join(
     PROJECT_ROOT,
@@ -459,6 +503,7 @@ async function runVideosJob(job, onProgress) {
     scenes,
     getImagePath,
     outputDir,
+    generationApproved,
     onProgress: (u) =>
       onProgress?.({
         step: u.step,
@@ -478,6 +523,8 @@ async function runVideosJob(job, onProgress) {
       jobId: job.id,
       order: clip.order,
       creativeId: cid,
+      generation: clip,
+      parentAssetId: scenes.find((s) => s.id === clip.sceneId)?.videoAssetId || null,
     });
     videoAssetIds.push(asset.id);
   }
@@ -563,6 +610,7 @@ async function runSceneVideoJob(job, onProgress) {
     outputDir,
     runLabel: `veo-scene/${sceneId}`,
     motionPromptOverride: motionPromptOverride || scene.motionPrompt || null,
+    generationApproved: job.request.generationApproved === true,
   });
 
   const asset = await registerVideoAsset({
@@ -573,6 +621,8 @@ async function runSceneVideoJob(job, onProgress) {
     jobId: job.id,
     order: sceneIndex,
     creativeId: cid,
+    generation: clip,
+    parentAssetId: scene.videoAssetId || null,
   });
 
   return { assetId: asset.id, sceneId, clipPath: clip.path };

@@ -24,6 +24,7 @@ import {
   STARTING_POINTS,
 } from "./starting-point.js";
 import { createCreative, assetFileUrl, fetchHealth, fetchProjectAssets, fetchProjectStoryboard } from "./api.js";
+import { renderProvidersDiagnostics } from "./providers-diagnostics.js";
 
 const views = {
   projects: document.getElementById("view-projects"),
@@ -116,6 +117,7 @@ function renderRoute() {
       break;
     case "settings":
       views.settings?.classList.remove("hidden");
+      void renderProvidersDiagnostics(document.getElementById("providers-diagnostics"));
       break;
     case "account":
       views.account?.classList.remove("hidden");

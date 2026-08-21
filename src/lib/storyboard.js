@@ -2,6 +2,7 @@ import { createClient } from "./veo-client.js";
 import { resolveAdConfig } from "./ad-config.js";
 import { getStoryboardCreativeRules } from "./creative-format.js";
 import { buildFlowMotionPrompt } from "./image-prompts.js";
+import { enrichStoryboardProductionMeta } from "./scene-classification.js";
 
 function buildStoryboardSchema(config) {
   const base = {
@@ -29,6 +30,9 @@ function buildStoryboardSchema(config) {
         visualBeat:
           "EN — só o que muda nesta cena: expressão, gesto, postura (continuação do discurso)",
         sceneType: "ugc | broll | react_overlay — tipo de plano",
+        sceneProductionClass:
+          "UGC | BROLL | PRODUCT | HERO | BACKGROUND | FOOD | SCREEN | MOTION_GRAPHIC | TESTIMONIAL | TRANSITION | OTHER",
+        sceneQualityRequirement: "LOW | MEDIUM | HIGH | PREMIUM",
         editingNotes: "notas de edição: whoosh no corte, zoom, etc. (opcional)",
         imagePrompt:
           "prompt EN: characterBrief + settingBrief + visualBeat desta cena",
@@ -154,7 +158,9 @@ function assignSceneTypes(storyboard, config) {
 }
 
 function applyUgcRules(storyboard, config) {
-  if (config.style !== "ugc") return storyboard;
+  if (config.style !== "ugc") {
+    return enrichStoryboardProductionMeta(storyboard);
+  }
 
   assignSceneTypes(storyboard, config);
 
@@ -211,7 +217,7 @@ function applyUgcRules(storyboard, config) {
     }
   }
 
-  return storyboard;
+  return enrichStoryboardProductionMeta(storyboard);
 }
 
 export async function generateStoryboard({ offer, adConfig: adConfigOverrides = {} }) {

@@ -22,6 +22,9 @@
     "storyboard": "node src/generate-ad.js --storyboard-only",
     "voice:add": "node src/add-voice-to-run.js",
     "check": "node src/check-setup.js",
+    "test:phase23": "node scripts/test-phase23.js",
+    "test:phase23:router": "node scripts/test-phase23.js router",
+    "test:phase23:floyo": "node scripts/test-phase23.js floyo",
     "api": "node server/index.js",
     "api:dev": "node --watch server/index.js"
   },

@@ -20,13 +20,38 @@ jobs:
 
       - name: Deploy to Contabo VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          FLOYO_API_KEY: ${{ secrets.FLOYO_API_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
+          envs: FLOYO_API_KEY
           script: |
             cd /opt/ecoom-direct-ads
             git pull origin main
             npm install --omit=dev
+            touch .env
+            set_env() {
+              KEY="$1"
+              VAL="$2"
+              if grep -q "^${KEY}=" .env 2>/dev/null; then
+                sed -i "s|^${KEY}=.*|${KEY}=${VAL}|" .env
+              else
+                echo "${KEY}=${VAL}" >> .env
+              fi
+            }
+            if [ -n "$FLOYO_API_KEY" ]; then
+              set_env AI_ROUTER_ENABLED true
+              set_env FLOYO_API_KEY "$FLOYO_API_KEY"
+              set_env FLOYO_API_BASE_URL https://api.floyo.ai
+              set_env FLOYO_GPU_COST_USD_PER_MIN 0.05
+              set_env FLOYO_WORKFLOW_LTX23_TEXT_TO_VIDEO workflow_2wWnsMQ2o9TQ9sMX
+              set_env FLOYO_WORKFLOW_LTX23_IMAGE_TO_VIDEO workflow_EvUBoMcM5MVBYPQx
+              set_env FLOYO_WORKFLOW_WAN22_IMAGE_TO_VIDEO workflow_ZUjdezXG4E3Jza3p
+              echo "✅ Floyo env synced on VPS"
+            else
+              echo "⚠️ FLOYO_API_KEY secret missing — skip Floyo sync"
+            fi
             pm2 startOrRestart ecosystem.config.cjs
             pm2 save

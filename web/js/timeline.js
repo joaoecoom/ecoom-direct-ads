@@ -3,6 +3,7 @@ import {
   assetFileUrl,
   fetchProjectScene,
   fetchProjectTimeline,
+  fetchSceneGenerationRoute,
   patchProjectScene,
   rebuildTimeline,
   regenerateSceneImage,
@@ -204,6 +205,40 @@ async function renderSceneEditor(projectId, timeline, previewEl) {
   const imgUrl = scene.imageAssetId ? assetFileUrl(scene.imageAssetId) : null;
   const motionPrompt = detail.scene?.motionPrompt ?? scene.motionPrompt ?? "";
 
+  let routePanel = `<p class="muted">A carregar rota de geração…</p>`;
+  try {
+    const routeData = await fetchSceneGenerationRoute(projectId, scene.id, {
+      sceneOverrides: {
+        generationProvider: detail.scene?.generationProvider,
+        generationModel: detail.scene?.generationModel,
+      },
+    });
+    const r = routeData.route;
+    const est = routeData.estimate;
+    const costLabel =
+      est?.costUnknown || est?.estimatedCostUsd == null
+        ? "COST UNKNOWN"
+        : `$${Number(est.estimatedCostUsd).toFixed(4)}`;
+    routePanel = `
+      <div class="generation-route-panel card subtle">
+        <h4>Model</h4>
+        <div class="generation-route-grid">
+          <div><span class="muted">Provider</span><br/><strong>${r.provider}</strong></div>
+          <div><span class="muted">Model</span><br/><strong>${r.model}</strong></div>
+          <div><span class="muted">Quality</span><br/><strong>${r.sceneQualityRequirement || r.qualityTier}</strong></div>
+          <div><span class="muted">Est. Cost</span><br/><strong>${costLabel}</strong></div>
+        </div>
+        <p class="muted small">${escapeHtml(r.reasoning || "")}</p>
+        ${
+          r.fallbackModel
+            ? `<p class="muted small">Fallback: ${r.fallbackProvider} / ${r.fallbackModel}</p>`
+            : ""
+        }
+      </div>`;
+  } catch {
+    routePanel = "";
+  }
+
   previewEl.innerHTML = `
     <div class="timeline-preview-head">
       <div>
@@ -228,6 +263,7 @@ async function renderSceneEditor(projectId, timeline, previewEl) {
         }
       </div>
       <div class="scene-editor-panel">
+        ${routePanel}
         <label class="field-label" for="scene-motion-prompt">Motion prompt</label>
         <textarea id="scene-motion-prompt" class="input scene-motion-input" rows="4">${escapeHtml(motionPrompt)}</textarea>
         <div class="scene-editor-actions">
@@ -302,8 +338,30 @@ async function handleSceneAction(action, dataset) {
 
     if (action === "regen-video") {
       const textarea = document.getElementById("scene-motion-prompt");
+      let generationApproved = false;
+      try {
+        const routeData = await fetchSceneGenerationRoute(activeProjectId, sceneId);
+        const provider = routeData?.route?.provider;
+        const est = routeData?.estimate;
+        const needsApproval = provider === "floyo" || provider === "kie";
+        if (needsApproval) {
+          const cost =
+            est?.costUnknown || est?.estimatedCostUsd == null
+              ? "COST UNKNOWN"
+              : `$${Number(est.estimatedCostUsd).toFixed(4)}`;
+          const ok = window.confirm(
+            `GENERATION PLAN\n\nProvider: ${provider}\nModel: ${routeData.route.model}\nEstimated Cost: ${cost}\n\nConfirmar geração paga?`,
+          );
+          if (!ok) return;
+          generationApproved = true;
+        }
+      } catch {
+        /* route preview optional */
+      }
+
       const data = await regenerateSceneVideo(activeProjectId, sceneId, {
         motionPrompt: textarea?.value?.trim() || undefined,
+        generationApproved,
       });
       startJobPoll(data.jobId, "video");
     }

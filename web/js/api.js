@@ -365,3 +365,42 @@ export async function regenerateSceneVideo(projectId, sceneId, body = {}) {
   if (!res.ok) throw new Error(data.error || "Regeneração de vídeo falhou");
   return data;
 }
+
+export async function fetchProviderDiagnostics() {
+  const res = await fetch(`${API_URL}/api/providers/diagnostics`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Diagnostics indisponíveis");
+  return data;
+}
+
+export async function fetchGenerationPlan(projectId, body = {}) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/generation/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Plano de geração indisponível");
+  return data;
+}
+
+export async function fetchSceneGenerationRoute(projectId, sceneId, body = {}) {
+  const res = await fetch(
+    `${API_URL}/api/projects/${projectId}/scenes/${sceneId}/generation/route`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Route indisponível");
+  return data;
+}
+
+export async function fetchProjectProductionCosts(projectId) {
+  const res = await fetch(`${API_URL}/api/projects/${projectId}/production/costs`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Custos indisponíveis");
+  return data;
+}

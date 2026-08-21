@@ -2396,3 +2396,47 @@ video {
 .ad-engine .create-form {
   margin: 0;
 }
+
+.generation-route-panel {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.generation-route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+  margin: 0.5rem 0;
+}
+
+.providers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.provider-status {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.provider-status.status-connected {
+  color: #34d399;
+}
+
+.provider-status.status-disconnected {
+  color: #94a3b8;
+}
+
+.provider-status.status-degraded {
+  color: #fbbf24;
+}
+
+.providers-model-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted, #94a3b8);
+  font-size: 0.9rem;
+}

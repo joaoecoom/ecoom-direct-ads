@@ -7,6 +7,12 @@ import {
 } from "./image-prompts.js";
 import { generateVideoFromImage } from "./veo-client.js";
 import { isUgcStoryboard, shouldUseUgcFlow } from "./ugc-flow.js";
+import { generateSceneVideoRouted } from "./generation-service.js";
+import { routeSceneVideoGeneration } from "./model-router.js";
+
+function useAiRouter() {
+  return process.env.AI_ROUTER_ENABLED !== "false";
+}
 
 export function buildSceneVeoPrompt(
   storyboard,
@@ -57,6 +63,8 @@ export async function animateSceneVideo({
   outputDir,
   runLabel,
   motionPromptOverride,
+  generationApproved = false,
+  onFallbackConfirm,
 }) {
   const clipDuration =
     storyboard.durationSeconds || adConfig.clipDurationSeconds || 8;
@@ -80,6 +88,31 @@ export async function animateSceneVideo({
     const id = scene.id || `parte-${sceneIndex + 1}`;
     await ensureOutputDir(outputDir);
     const outputFileName = path.join(outputDir, `${id}.mp4`);
+
+    if (useAiRouter()) {
+      const route = routeSceneVideoGeneration({
+        scene: storyboardScene,
+        storyboard,
+        adConfig,
+        imagePath,
+      });
+      console.log(`🎬 B-roll [${route.provider}/${route.model}]: ${id}…`);
+      return generateSceneVideoRouted({
+        storyboard,
+        adConfig,
+        scene: storyboardScene,
+        sceneIndex,
+        imagePath,
+        lastFramePath: useFlow ? lastFramePath : undefined,
+        outputFileName,
+        runLabel: runLabel || `broll/${id}`,
+        motionPromptOverride: brollMotion,
+        prompt: brollMotion,
+        approved: generationApproved,
+        onFallbackConfirm,
+      });
+    }
+
     console.log(`🎬 B-roll Veo: ${id}…`);
     const clip = await generateVideoFromImage({
       imagePath,
@@ -106,6 +139,30 @@ export async function animateSceneVideo({
   await ensureOutputDir(outputDir);
   const outputFileName = path.join(outputDir, `${id}.mp4`);
 
+  if (useAiRouter()) {
+    const route = routeSceneVideoGeneration({
+      scene: storyboardScene,
+      storyboard,
+      adConfig,
+      imagePath,
+    });
+    console.log(`🎬 Scene [${route.provider}/${route.model}]: ${id}…`);
+    return generateSceneVideoRouted({
+      storyboard,
+      adConfig,
+      scene: storyboardScene,
+      sceneIndex,
+      imagePath,
+      lastFramePath: useFlow ? lastFramePath : undefined,
+      outputFileName,
+      runLabel: runLabel || `scene/${id}`,
+      motionPromptOverride,
+      prompt,
+      approved: generationApproved,
+      onFallbackConfirm,
+    });
+  }
+
   const clip = await generateVideoFromImage({
     imagePath,
     lastFramePath: useFlow ? lastFramePath : undefined,
@@ -130,6 +187,8 @@ export async function animateAllSceneVideos({
   getImagePath,
   outputDir,
   onProgress,
+  generationApproved = false,
+  onFallbackConfirm,
 }) {
   const sceneTotal = scenes.length;
   const isUgcFlow = shouldUseUgcFlow(storyboard, adConfig, sceneTotal);
@@ -163,6 +222,8 @@ export async function animateAllSceneVideos({
       lastFramePath,
       outputDir,
       runLabel: `veo-project/${sceneId}`,
+      generationApproved,
+      onFallbackConfirm,
     });
 
     clips.push(result);
